@@ -87,13 +87,7 @@ export type {
 } from "./src/layout.ts";
 
 // Input handling
-export {
-  isKey,
-  keyEvents,
-  KeyboardInput,
-  Keys,
-  readKey,
-} from "./src/input.ts";
+export { isKey, KeyboardInput, keyEvents, Keys, readKey } from "./src/input.ts";
 export type { KeyEvent } from "./src/input.ts";
 
 // App runner

@@ -1,8 +1,8 @@
 // App - the main application runner with state management
 
 import { Canvas } from "./canvas.ts";
-import { Component, Rect } from "./components.ts";
-import { KeyEvent, KeyboardInput } from "./input.ts";
+import type { Component, Rect } from "./components.ts";
+import { KeyboardInput, type KeyEvent } from "./input.ts";
 import {
   clearScreen,
   enterAltScreen,
@@ -12,7 +12,7 @@ import {
   onResize,
   setRawMode,
   showCursor,
-  TerminalSize,
+  type TerminalSize,
   write,
 } from "./terminal.ts";
 import { cursor } from "./ansi.ts";
@@ -23,9 +23,17 @@ export interface AppConfig<S> {
   /** Render function - returns the UI based on current state */
   render: (state: S, ctx: RenderContext) => Component;
   /** Key handler - return new state or undefined to keep current */
-  onKey?: (event: KeyEvent, state: S, ctx: AppContext<S>) => S | undefined | void;
+  onKey?: (
+    event: KeyEvent,
+    state: S,
+    ctx: AppContext<S>,
+  ) => S | undefined | void;
   /** Tick handler for animations - return new state */
-  onTick?: (state: S, delta: number, ctx: AppContext<S>) => S | undefined | void;
+  onTick?: (
+    state: S,
+    delta: number,
+    ctx: AppContext<S>,
+  ) => S | undefined | void;
   /** Tick interval in ms (default: 16 ~60fps) */
   tickInterval?: number;
   /** Use alternate screen buffer (default: true) */
@@ -33,7 +41,11 @@ export interface AppConfig<S> {
   /** Hide cursor (default: true) */
   hideCursor?: boolean;
   /** Handle resize */
-  onResize?: (size: TerminalSize, state: S, ctx: AppContext<S>) => S | undefined | void;
+  onResize?: (
+    size: TerminalSize,
+    state: S,
+    ctx: AppContext<S>,
+  ) => S | undefined | void;
 }
 
 export interface RenderContext {
@@ -104,7 +116,9 @@ export class App<S> {
     this.needsRender = false;
 
     const size = getSize();
-    if (size.columns !== this.canvas.width || size.rows !== this.canvas.height) {
+    if (
+      size.columns !== this.canvas.width || size.rows !== this.canvas.height
+    ) {
       this.canvas.resize(size.columns, size.rows);
     }
 

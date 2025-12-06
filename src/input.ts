@@ -241,10 +241,18 @@ export async function* keyEvents(): AsyncGenerator<KeyEvent> {
 }
 
 // Helper to check for specific key combos
-export function isKey(event: KeyEvent, key: string, modifiers?: { ctrl?: boolean; alt?: boolean; shift?: boolean }): boolean {
+export function isKey(
+  event: KeyEvent,
+  key: string,
+  modifiers?: { ctrl?: boolean; alt?: boolean; shift?: boolean },
+): boolean {
   if (event.key.toLowerCase() !== key.toLowerCase()) return false;
-  if (modifiers?.ctrl !== undefined && event.ctrl !== modifiers.ctrl) return false;
+  if (modifiers?.ctrl !== undefined && event.ctrl !== modifiers.ctrl) {
+    return false;
+  }
   if (modifiers?.alt !== undefined && event.alt !== modifiers.alt) return false;
-  if (modifiers?.shift !== undefined && event.shift !== modifiers.shift) return false;
+  if (modifiers?.shift !== undefined && event.shift !== modifiers.shift) {
+    return false;
+  }
   return true;
 }
