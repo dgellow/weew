@@ -1,6 +1,6 @@
 // Canvas - a 2D buffer for efficient terminal rendering
 
-import { cursor, stripAnsi, style } from "./ansi.ts";
+import { charWidth, cursor, stripAnsi, style } from "./ansi.ts";
 import { getSize, write } from "./terminal.ts";
 
 export interface Cell {
@@ -62,7 +62,7 @@ export class Canvas {
     return undefined;
   }
 
-  /** Write text at position */
+  /** Write text at position (handles wide characters like emoji/CJK) */
   text(
     x: number,
     y: number,
@@ -72,13 +72,28 @@ export class Canvas {
     const stripped = stripAnsi(text);
     const xi = Math.floor(x);
     const yi = Math.floor(y);
-    for (let i = 0; i < stripped.length; i++) {
-      this.set(xi + i, yi, {
-        char: stripped[i],
+    let col = 0;
+    for (const char of stripped) {
+      const width = charWidth(char);
+      if (width === 0) continue; // Skip zero-width characters
+
+      this.set(xi + col, yi, {
+        char: char,
         fg: options?.fg,
         bg: options?.bg,
         style: options?.style,
       });
+
+      // For wide characters, fill the next cell with empty placeholder
+      if (width === 2) {
+        this.set(xi + col + 1, yi, {
+          char: "", // Empty - cursor will skip this
+          fg: options?.fg,
+          bg: options?.bg,
+        });
+      }
+
+      col += width;
     }
   }
 
@@ -142,6 +157,9 @@ export class Canvas {
       for (let x = 0; x < this.width; x++) {
         const cell = this.buffer[y][x];
         const prevCell = this.prevBuffer?.[y]?.[x];
+
+        // Skip empty placeholder cells (second half of wide characters)
+        if (cell.char === "") continue;
 
         // Skip if cell hasn't changed
         if (
