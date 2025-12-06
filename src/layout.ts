@@ -1,10 +1,16 @@
 // Layout engine - flexbox-inspired positioning
 
-import { Canvas } from "./canvas.ts";
-import { Component, Rect } from "./components.ts";
+import type { Canvas } from "./canvas.ts";
+import type { Component, Rect } from "./components.ts";
 
 export type Direction = "row" | "column";
-export type Justify = "start" | "end" | "center" | "between" | "around" | "evenly";
+export type Justify =
+  | "start"
+  | "end"
+  | "center"
+  | "between"
+  | "around"
+  | "evenly";
 export type Align = "start" | "end" | "center" | "stretch";
 
 export interface FlexProps {
@@ -18,9 +24,9 @@ export interface FlexProps {
 
 export interface FlexChild {
   component: Component;
-  flex?: number;      // Flex grow factor
-  width?: number;     // Fixed width (or height in column mode)
-  height?: number;    // Fixed height (or width in column mode)
+  flex?: number; // Flex grow factor
+  width?: number; // Fixed width (or height in column mode)
+  height?: number; // Fixed height (or width in column mode)
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -95,7 +101,9 @@ export function Flex(props: FlexProps): Component {
           initialOffset = extraSpace / 2;
           break;
         case "between":
-          spacing = props.children.length > 1 ? extraSpace / (props.children.length - 1) : 0;
+          spacing = props.children.length > 1
+            ? extraSpace / (props.children.length - 1)
+            : 0;
           break;
         case "around":
           spacing = extraSpace / props.children.length;
@@ -126,8 +134,12 @@ export function Flex(props: FlexProps): Component {
         // Apply cross-axis constraints
         const minCrossSize = isRow ? child.minHeight : child.minWidth;
         const maxCrossSize = isRow ? child.maxHeight : child.maxWidth;
-        if (minCrossSize !== undefined) childCrossSize = Math.max(childCrossSize, minCrossSize);
-        if (maxCrossSize !== undefined) childCrossSize = Math.min(childCrossSize, maxCrossSize);
+        if (minCrossSize !== undefined) {
+          childCrossSize = Math.max(childCrossSize, minCrossSize);
+        }
+        if (maxCrossSize !== undefined) {
+          childCrossSize = Math.min(childCrossSize, maxCrossSize);
+        }
 
         // Align on cross axis
         if (align !== "stretch" && fixedCrossSize === undefined) {
@@ -139,32 +151,52 @@ export function Flex(props: FlexProps): Component {
             crossPos = (isRow ? rect.y : rect.x) + crossSize - childCrossSize;
             break;
           case "center":
-            crossPos = (isRow ? rect.y : rect.x) + (crossSize - childCrossSize) / 2;
+            crossPos = (isRow ? rect.y : rect.x) +
+              (crossSize - childCrossSize) / 2;
             break;
         }
 
         // Build child rect
         const childRect: Rect = isRow
-          ? { x: Math.floor(mainPos), y: Math.floor(crossPos), width: size, height: childCrossSize }
-          : { x: Math.floor(crossPos), y: Math.floor(mainPos), width: childCrossSize, height: size };
+          ? {
+            x: Math.floor(mainPos),
+            y: Math.floor(crossPos),
+            width: size,
+            height: childCrossSize,
+          }
+          : {
+            x: Math.floor(crossPos),
+            y: Math.floor(mainPos),
+            width: childCrossSize,
+            height: size,
+          };
 
         // Render child
         child.component.render(canvas, childRect);
 
         // Move to next position
-        mainPos += size + gap + (justify === "between" || justify === "around" || justify === "evenly" ? spacing : 0);
+        mainPos += size + gap +
+          (justify === "between" || justify === "around" || justify === "evenly"
+            ? spacing
+            : 0);
       }
     },
   };
 }
 
 // Shorthand for row layout
-export function Row(children: FlexChild[], options?: Omit<FlexProps, "children" | "direction">): Component {
+export function Row(
+  children: FlexChild[],
+  options?: Omit<FlexProps, "children" | "direction">,
+): Component {
   return Flex({ ...options, direction: "row", children });
 }
 
 // Shorthand for column layout
-export function Column(children: FlexChild[], options?: Omit<FlexProps, "children" | "direction">): Component {
+export function Column(
+  children: FlexChild[],
+  options?: Omit<FlexProps, "children" | "direction">,
+): Component {
   return Flex({ ...options, direction: "column", children });
 }
 
@@ -182,7 +214,9 @@ export function Grid(props: GridProps): Component {
       const { columns, gap = 0 } = props;
       const rows = props.rows ?? Math.ceil(props.children.length / columns);
 
-      const cellWidth = Math.floor((rect.width - (columns - 1) * gap) / columns);
+      const cellWidth = Math.floor(
+        (rect.width - (columns - 1) * gap) / columns,
+      );
       const cellHeight = Math.floor((rect.height - (rows - 1) * gap) / rows);
 
       for (let i = 0; i < props.children.length; i++) {
@@ -218,14 +252,29 @@ export function Stack(children: Component[]): Component {
 
 // Padding wrapper
 export interface PaddingProps {
-  padding: number | { top?: number; right?: number; bottom?: number; left?: number };
+  padding: number | {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+  };
   child: Component;
 }
 
 export function Padding(props: PaddingProps): Component {
   const p = typeof props.padding === "number"
-    ? { top: props.padding, right: props.padding, bottom: props.padding, left: props.padding }
-    : { top: props.padding.top ?? 0, right: props.padding.right ?? 0, bottom: props.padding.bottom ?? 0, left: props.padding.left ?? 0 };
+    ? {
+      top: props.padding,
+      right: props.padding,
+      bottom: props.padding,
+      left: props.padding,
+    }
+    : {
+      top: props.padding.top ?? 0,
+      right: props.padding.right ?? 0,
+      bottom: props.padding.bottom ?? 0,
+      left: props.padding.left ?? 0,
+    };
 
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -280,10 +329,14 @@ export function Positioned(props: PositionedProps): Component {
       let y = rect.y;
 
       if (props.x !== undefined) x = rect.x + props.x;
-      else if (props.right !== undefined) x = rect.x + rect.width - w - props.right;
+      else if (props.right !== undefined) {
+        x = rect.x + rect.width - w - props.right;
+      }
 
       if (props.y !== undefined) y = rect.y + props.y;
-      else if (props.bottom !== undefined) y = rect.y + rect.height - h - props.bottom;
+      else if (props.bottom !== undefined) {
+        y = rect.y + rect.height - h - props.bottom;
+      }
 
       props.child.render(canvas, { x, y, width: w, height: h });
     },

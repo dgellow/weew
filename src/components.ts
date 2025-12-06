@@ -1,7 +1,13 @@
 // Component system - simple, functional UI building blocks
 
-import { fg, bg, style as ansiStyle, visibleLength, stripAnsi } from "./ansi.ts";
-import { Canvas } from "./canvas.ts";
+import {
+  bg,
+  fg,
+  stripAnsi,
+  style as ansiStyle,
+  visibleLength,
+} from "./ansi.ts";
+import type { Canvas } from "./canvas.ts";
 
 // Base types
 export interface Rect {
@@ -36,8 +42,28 @@ export function buildStyle(s: Style): string {
   return result;
 }
 
+// Color helpers interface
+export interface ColorHelpers {
+  black: string;
+  red: string;
+  green: string;
+  yellow: string;
+  blue: string;
+  magenta: string;
+  cyan: string;
+  white: string;
+  gray: string;
+  rgb: (r: number, g: number, b: number) => string;
+  hex: (hex: string) => string;
+}
+
+export interface Colors {
+  fg: ColorHelpers;
+  bg: ColorHelpers;
+}
+
 // Color helpers for convenience
-export const colors = {
+export const colors: Colors = {
   fg: {
     black: fg.black,
     red: fg.red,
@@ -49,7 +75,7 @@ export const colors = {
     white: fg.white,
     gray: fg.brightBlack,
     rgb: fg.rgb,
-    hex: (hex: string) => {
+    hex: (hex: string): string => {
       const r = parseInt(hex.slice(1, 3), 16);
       const g = parseInt(hex.slice(3, 5), 16);
       const b = parseInt(hex.slice(5, 7), 16);
@@ -67,7 +93,7 @@ export const colors = {
     white: bg.white,
     gray: bg.brightBlack,
     rgb: bg.rgb,
-    hex: (hex: string) => {
+    hex: (hex: string): string => {
       const r = parseInt(hex.slice(1, 3), 16);
       const g = parseInt(hex.slice(3, 5), 16);
       const b = parseInt(hex.slice(5, 7), 16);
@@ -164,7 +190,12 @@ export interface BoxProps {
   borderColor?: string;
   title?: string;
   titleAlign?: "left" | "center" | "right";
-  padding?: number | { top?: number; right?: number; bottom?: number; left?: number };
+  padding?: number | {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+  };
   fill?: string;
   style?: Style;
   children?: Component | Component[];
@@ -179,9 +210,16 @@ export function Box(props: BoxProps = {}): Component {
     render(canvas: Canvas, rect: Rect) {
       // Fill background if specified
       if (props.fill || props.style?.bg) {
-        canvas.fill(rect.x, rect.y, rect.width, rect.height, props.fill ?? " ", {
-          bg: props.style?.bg,
-        });
+        canvas.fill(
+          rect.x,
+          rect.y,
+          rect.width,
+          rect.height,
+          props.fill ?? " ",
+          {
+            bg: props.style?.bg,
+          },
+        );
       }
 
       // Draw border
@@ -190,20 +228,41 @@ export function Box(props: BoxProps = {}): Component {
 
         // Corners
         canvas.set(rect.x, rect.y, { char: borderChars.topLeft, fg: bc });
-        canvas.set(rect.x + rect.width - 1, rect.y, { char: borderChars.topRight, fg: bc });
-        canvas.set(rect.x, rect.y + rect.height - 1, { char: borderChars.bottomLeft, fg: bc });
-        canvas.set(rect.x + rect.width - 1, rect.y + rect.height - 1, { char: borderChars.bottomRight, fg: bc });
+        canvas.set(rect.x + rect.width - 1, rect.y, {
+          char: borderChars.topRight,
+          fg: bc,
+        });
+        canvas.set(rect.x, rect.y + rect.height - 1, {
+          char: borderChars.bottomLeft,
+          fg: bc,
+        });
+        canvas.set(rect.x + rect.width - 1, rect.y + rect.height - 1, {
+          char: borderChars.bottomRight,
+          fg: bc,
+        });
 
         // Top and bottom edges
         for (let x = 1; x < rect.width - 1; x++) {
-          canvas.set(rect.x + x, rect.y, { char: borderChars.horizontal, fg: bc });
-          canvas.set(rect.x + x, rect.y + rect.height - 1, { char: borderChars.horizontal, fg: bc });
+          canvas.set(rect.x + x, rect.y, {
+            char: borderChars.horizontal,
+            fg: bc,
+          });
+          canvas.set(rect.x + x, rect.y + rect.height - 1, {
+            char: borderChars.horizontal,
+            fg: bc,
+          });
         }
 
         // Left and right edges
         for (let y = 1; y < rect.height - 1; y++) {
-          canvas.set(rect.x, rect.y + y, { char: borderChars.vertical, fg: bc });
-          canvas.set(rect.x + rect.width - 1, rect.y + y, { char: borderChars.vertical, fg: bc });
+          canvas.set(rect.x, rect.y + y, {
+            char: borderChars.vertical,
+            fg: bc,
+          });
+          canvas.set(rect.x + rect.width - 1, rect.y + y, {
+            char: borderChars.vertical,
+            fg: bc,
+          });
         }
 
         // Draw title
@@ -233,12 +292,18 @@ export function Box(props: BoxProps = {}): Component {
 
       // Render children
       if (props.children) {
-        const children = Array.isArray(props.children) ? props.children : [props.children];
+        const children = Array.isArray(props.children)
+          ? props.children
+          : [props.children];
         let y = contentRect.y;
 
         for (const child of children) {
           if (y >= contentRect.y + contentRect.height) break;
-          child.render(canvas, { ...contentRect, y, height: contentRect.y + contentRect.height - y });
+          child.render(canvas, {
+            ...contentRect,
+            y,
+            height: contentRect.y + contentRect.height - y,
+          });
           y++; // Simple vertical stacking
         }
       }
@@ -295,7 +360,10 @@ export function Spinner(props: SpinnerProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
       const frameIndex = props.frame % spinnerFrames.length;
-      canvas.set(rect.x, rect.y, { char: spinnerFrames[frameIndex], fg: props.color });
+      canvas.set(rect.x, rect.y, {
+        char: spinnerFrames[frameIndex],
+        fg: props.color,
+      });
 
       if (props.label) {
         canvas.text(rect.x + 2, rect.y, props.label);
@@ -351,8 +419,9 @@ export function Table(props: TableProps): Component {
 
       // Calculate column widths
       const allRows = headers ? [headers, ...rows] : rows;
-      const colCount = Math.max(...allRows.map(r => r.length));
-      const colWidths = props.columnWidths ?? calculateColumnWidths(allRows, rect.width, colCount);
+      const colCount = Math.max(...allRows.map((r) => r.length));
+      const colWidths = props.columnWidths ??
+        calculateColumnWidths(allRows, rect.width, colCount);
 
       let y = rect.y;
 
@@ -364,7 +433,9 @@ export function Table(props: TableProps): Component {
           canvas.text(x, y, text, {
             fg: props.headerStyle?.fg,
             bg: props.headerStyle?.bg,
-            style: props.headerStyle ? buildStyle(props.headerStyle) : undefined,
+            style: props.headerStyle
+              ? buildStyle(props.headerStyle)
+              : undefined,
           });
           x += colWidths[i] + (border ? 3 : 1);
         }
@@ -401,11 +472,18 @@ export function Table(props: TableProps): Component {
 }
 
 // Helper functions
-function normalizePadding(p: number | { top?: number; right?: number; bottom?: number; left?: number }) {
+function normalizePadding(
+  p: number | { top?: number; right?: number; bottom?: number; left?: number },
+) {
   if (typeof p === "number") {
     return { top: p, right: p, bottom: p, left: p };
   }
-  return { top: p.top ?? 0, right: p.right ?? 0, bottom: p.bottom ?? 0, left: p.left ?? 0 };
+  return {
+    top: p.top ?? 0,
+    right: p.right ?? 0,
+    bottom: p.bottom ?? 0,
+    left: p.left ?? 0,
+  };
 }
 
 function wrapText(text: string, width: number): string[] {
@@ -440,10 +518,14 @@ function padOrTruncate(text: string, width: number): string {
   return text + " ".repeat(width - stripped.length);
 }
 
-function calculateColumnWidths(rows: string[][], totalWidth: number, colCount: number): number[] {
+function calculateColumnWidths(
+  rows: string[][],
+  totalWidth: number,
+  colCount: number,
+): number[] {
   const widths: number[] = [];
   for (let i = 0; i < colCount; i++) {
-    const maxWidth = Math.max(...rows.map(r => visibleLength(r[i] ?? "")));
+    const maxWidth = Math.max(...rows.map((r) => visibleLength(r[i] ?? "")));
     widths.push(Math.min(maxWidth, Math.floor(totalWidth / colCount) - 3));
   }
   return widths;

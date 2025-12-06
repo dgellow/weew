@@ -1,6 +1,7 @@
 # weew
 
-A lightweight terminal UI library for Deno. No React, no JSX, no npm dependencies.
+A lightweight terminal UI library for Deno. No React, no JSX, no npm
+dependencies.
 
 ## Features
 
@@ -44,27 +45,27 @@ Run with: `deno run --allow-all your-app.ts`
 ### Text
 
 ```typescript
-Text("Hello world")
+Text("Hello world");
 
 Text({
   content: "Styled text",
   style: { fg: colors.fg.cyan, bold: true },
   align: "center",
   wrap: true,
-})
+});
 ```
 
 ### Box
 
 ```typescript
 Box({
-  border: "rounded",  // "single" | "double" | "rounded" | "bold" | "none"
+  border: "rounded", // "single" | "double" | "rounded" | "bold" | "none"
   borderColor: colors.fg.blue,
   title: " Title ",
   titleAlign: "center",
-  padding: 1,  // or { top: 1, right: 2, bottom: 1, left: 2 }
+  padding: 1, // or { top: 1, right: 2, bottom: 1, left: 2 }
   children: Text("Content"),
-})
+});
 ```
 
 ### List
@@ -75,7 +76,7 @@ List({
   selected: 0,
   selectedStyle: { fg: colors.fg.cyan, bold: true },
   bullet: "•",
-})
+});
 ```
 
 ### Progress
@@ -86,17 +87,17 @@ Progress({
   filledColor: colors.fg.green,
   emptyColor: colors.fg.gray,
   showPercent: true,
-})
+});
 ```
 
 ### Spinner
 
 ```typescript
 Spinner({
-  frame: state.frame,  // Increment in onTick
+  frame: state.frame, // Increment in onTick
   label: "Loading...",
   color: colors.fg.yellow,
-})
+});
 ```
 
 ### Table
@@ -109,7 +110,7 @@ Table({
     ["Bob", "25", "LA"],
   ],
   headerStyle: { bold: true },
-})
+});
 ```
 
 ## Layout
@@ -120,12 +121,12 @@ Table({
 Row([
   { component: Text("Left"), width: 20 },
   { component: Text("Right"), flex: 1 },
-], { gap: 1, justify: "between", align: "center" })
+], { gap: 1, justify: "between", align: "center" });
 
 Column([
   { component: Text("Top"), height: 3 },
   { component: Text("Bottom"), flex: 1 },
-])
+]);
 ```
 
 ### Grid
@@ -158,7 +159,7 @@ Grid({
 ```typescript
 import { isKey, Keys } from "weew";
 
-onKey: (event, state, ctx) => {
+onKey: ((event, state, ctx) => {
   // Check specific keys
   if (isKey(event, "q")) ctx.exit();
   if (isKey(event, "s", { ctrl: true })) save();
@@ -169,34 +170,35 @@ onKey: (event, state, ctx) => {
 
   // Modifiers
   if (event.ctrl && event.key === "c") ctx.exit();
-}
+});
 ```
 
 ### Available Keys
 
-`Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `F1`-`F12`
+`Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, `Up`, `Down`, `Left`, `Right`,
+`Home`, `End`, `PageUp`, `PageDown`, `F1`-`F12`
 
 ## Colors
 
 ```typescript
-import { colors, fg, bg } from "weew";
+import { bg, colors, fg } from "weew";
 
 // Named colors
-colors.fg.red
-colors.fg.cyan
-colors.bg.blue
+colors.fg.red;
+colors.fg.cyan;
+colors.bg.blue;
 
 // RGB
-colors.fg.rgb(255, 100, 50)
-colors.bg.rgb(0, 0, 0)
+colors.fg.rgb(255, 100, 50);
+colors.bg.rgb(0, 0, 0);
 
 // Hex
-colors.fg.hex("#ff6432")
+colors.fg.hex("#ff6432");
 
 // Direct ANSI
-fg.red
-bg.brightBlue
-fg.color(196)  // 256 color
+fg.red;
+bg.brightBlue;
+fg.color(196); // 256 color
 ```
 
 ## App Configuration
@@ -236,13 +238,13 @@ ctx.size()             // Get terminal size
 For one-off renders without the app loop:
 
 ```typescript
-import { renderOnce, Box, Text } from "weew";
+import { Box, renderOnce, Text } from "weew";
 
 renderOnce(
   Box({
     border: "single",
     children: Text("Hello!"),
-  })
+  }),
 );
 ```
 
@@ -250,12 +252,12 @@ Direct terminal control:
 
 ```typescript
 import {
+  clearScreen,
   enterAltScreen,
   exitAltScreen,
   hideCursor,
-  showCursor,
-  clearScreen,
   moveTo,
+  showCursor,
   write,
 } from "weew";
 ```

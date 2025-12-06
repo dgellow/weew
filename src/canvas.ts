@@ -1,6 +1,6 @@
 // Canvas - a 2D buffer for efficient terminal rendering
 
-import { cursor, style, stripAnsi } from "./ansi.ts";
+import { cursor, stripAnsi, style } from "./ansi.ts";
 import { getSize, write } from "./terminal.ts";
 
 export interface Cell {
@@ -24,8 +24,9 @@ export class Canvas {
   }
 
   private createBuffer(): Cell[][] {
-    return Array.from({ length: this.height }, () =>
-      Array.from({ length: this.width }, () => ({ char: " " }))
+    return Array.from(
+      { length: this.height },
+      () => Array.from({ length: this.width }, () => ({ char: " " })),
     );
   }
 
@@ -66,7 +67,7 @@ export class Canvas {
     x: number,
     y: number,
     text: string,
-    options?: { fg?: string; bg?: string; style?: string }
+    options?: { fg?: string; bg?: string; style?: string },
   ): void {
     const stripped = stripAnsi(text);
     const xi = Math.floor(x);
@@ -82,7 +83,13 @@ export class Canvas {
   }
 
   /** Draw a horizontal line */
-  hline(x: number, y: number, length: number, char = "─", options?: { fg?: string; bg?: string }): void {
+  hline(
+    x: number,
+    y: number,
+    length: number,
+    char = "─",
+    options?: { fg?: string; bg?: string },
+  ): void {
     const xi = Math.floor(x);
     const yi = Math.floor(y);
     const len = Math.floor(length);
@@ -92,7 +99,13 @@ export class Canvas {
   }
 
   /** Draw a vertical line */
-  vline(x: number, y: number, length: number, char = "│", options?: { fg?: string; bg?: string }): void {
+  vline(
+    x: number,
+    y: number,
+    length: number,
+    char = "│",
+    options?: { fg?: string; bg?: string },
+  ): void {
     const xi = Math.floor(x);
     const yi = Math.floor(y);
     const len = Math.floor(length);
@@ -108,7 +121,7 @@ export class Canvas {
     width: number,
     height: number,
     char = " ",
-    options?: { fg?: string; bg?: string }
+    options?: { fg?: string; bg?: string },
   ): void {
     const xi = Math.floor(x);
     const yi = Math.floor(y);
@@ -156,7 +169,9 @@ export class Canvas {
     }
 
     // Save current buffer as previous
-    this.prevBuffer = this.buffer.map(row => row.map(cell => ({ ...cell })));
+    this.prevBuffer = this.buffer.map((row) =>
+      row.map((cell) => ({ ...cell }))
+    );
   }
 
   /** Force full redraw (ignores diff) */

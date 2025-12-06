@@ -2,8 +2,8 @@
 
 import {
   Box,
-  Column,
   colors,
+  Column,
   isKey,
   Keys,
   List,
@@ -92,13 +92,22 @@ await run<State>({
                 },
                 {
                   component: Row([
-                    { component: Spinner({ frame: state.spinnerFrame, color: colors.fg.yellow }), width: 2 },
+                    {
+                      component: Spinner({
+                        frame: state.spinnerFrame,
+                        color: colors.fg.yellow,
+                      }),
+                      width: 2,
+                    },
                     { component: Text("Loading..."), flex: 1 },
                   ]),
                   height: 1,
                 },
                 {
-                  component: Text({ content: "Progress:", style: { fg: colors.fg.gray } }),
+                  component: Text({
+                    content: "Progress:",
+                    style: { fg: colors.fg.gray },
+                  }),
                   height: 1,
                 },
                 {
@@ -142,7 +151,8 @@ await run<State>({
     if (event.key === Keys.Up) {
       return {
         ...state,
-        selected: (state.selected - 1 + state.items.length) % state.items.length,
+        selected: (state.selected - 1 + state.items.length) %
+          state.items.length,
       };
     }
 
