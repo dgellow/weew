@@ -48,28 +48,41 @@ export type { Cell } from "./src/canvas.ts";
 
 // Components
 export {
+  Badge,
   borders,
   Box,
   buildStyle,
   colors,
+  Divider,
+  FocusContainer,
   List,
   Progress,
+  ScrollBox,
+  Spacer,
   Spinner,
   Table,
   Text,
+  TextInput,
 } from "./src/components.ts";
 export type {
+  BadgeProps,
   BorderStyle,
   BoxProps,
   ColorHelpers,
   Colors,
   Component,
+  DividerProps,
+  FocusableItem,
+  FocusContainerProps,
   ListProps,
   ProgressProps,
   Rect,
+  ScrollBoxProps,
+  SpacerProps,
   SpinnerProps,
   Style,
   TableProps,
+  TextInputProps,
   TextProps,
 } from "./src/components.ts";
 
