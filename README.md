@@ -261,7 +261,3 @@ import {
   write,
 } from "weew";
 ```
-
-## License
-
-MIT
