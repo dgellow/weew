@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { isKey, Keys } from "./input.ts";
 import type { KeyEvent } from "./input.ts";
 

@@ -15,7 +15,7 @@ await run<State>({
       borderColor: colors.fg.cyan,
       title: " Counter ",
       padding: 1,
-      children: Text({
+      child: Text({
         content: `Count: ${state.count}\n\n↑/↓ to change, q to quit`,
         style: { fg: colors.fg.white },
       }),

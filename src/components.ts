@@ -198,7 +198,8 @@ export interface BoxProps {
   };
   fill?: string;
   style?: Style;
-  children?: Component | Component[];
+  /** Single child component. Use Column([...]) for multiple children. */
+  child?: Component;
 }
 
 export function Box(props: BoxProps = {}): Component {
@@ -290,22 +291,9 @@ export function Box(props: BoxProps = {}): Component {
         height: rect.height - (borderOffset * 2) - padding.top - padding.bottom,
       };
 
-      // Render children
-      if (props.children) {
-        const children = Array.isArray(props.children)
-          ? props.children
-          : [props.children];
-        let y = contentRect.y;
-
-        for (const child of children) {
-          if (y >= contentRect.y + contentRect.height) break;
-          child.render(canvas, {
-            ...contentRect,
-            y,
-            height: contentRect.y + contentRect.height - y,
-          });
-          y++; // Simple vertical stacking
-        }
+      // Render child
+      if (props.child) {
+        props.child.render(canvas, contentRect);
       }
     },
   };

@@ -39,7 +39,7 @@ await run<State>({
           title: " weew demo ",
           titleAlign: "center",
           padding: { left: 1, right: 1 },
-          children: Text({
+          child: Text({
             content: "A lightweight terminal UI library for Deno",
             style: { fg: colors.fg.gray },
             align: "center",
@@ -58,7 +58,7 @@ await run<State>({
               borderColor: colors.fg.blue,
               title: " Menu ",
               padding: 1,
-              children: List({
+              child: List({
                 items: state.items,
                 selected: state.selected,
                 selectedStyle: { fg: colors.fg.cyan, bold: true },
@@ -75,7 +75,7 @@ await run<State>({
               borderColor: colors.fg.green,
               title: ` ${state.items[state.selected]} `,
               padding: 1,
-              children: Column([
+              child: Column([
                 {
                   component: Text({
                     content: `Selected: ${state.items[state.selected]}`,
@@ -131,7 +131,7 @@ await run<State>({
       {
         component: Box({
           border: "none",
-          children: Text({
+          child: Text({
             content: `Size: ${width}x${height} | Press 'q' to quit`,
             style: { fg: colors.fg.gray },
             align: "center",

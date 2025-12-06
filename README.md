@@ -27,7 +27,7 @@ await run({
       borderColor: colors.fg.cyan,
       title: " Counter ",
       padding: 1,
-      children: Text(`Count: ${state.count}`),
+      child: Text(`Count: ${state.count}`),
     }),
 
   onKey: (event, state, ctx) => {
@@ -64,7 +64,7 @@ Box({
   title: " Title ",
   titleAlign: "center",
   padding: 1, // or { top: 1, right: 2, bottom: 1, left: 2 }
-  children: Text("Content"),
+  child: Text("Content"), // Use Column([...]) for multiple children
 });
 ```
 
@@ -243,7 +243,7 @@ import { Box, renderOnce, Text } from "weew";
 renderOnce(
   Box({
     border: "single",
-    children: Text("Hello!"),
+    child: Text("Hello!"),
   }),
 );
 ```

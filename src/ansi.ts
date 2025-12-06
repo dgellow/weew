@@ -160,9 +160,62 @@ export function stripAnsi(str: string): string {
   return str.replace(ANSI_REGEX, "");
 }
 
-// Get visible length of string (without ANSI codes)
+/**
+ * Get the display width of a character.
+ * Returns 2 for wide characters (CJK, emoji), 0 for combining marks, 1 otherwise.
+ */
+export function charWidth(char: string): number {
+  const code = char.codePointAt(0);
+  if (code === undefined) return 0;
+
+  // Combining marks and zero-width characters
+  if (
+    (code >= 0x0300 && code <= 0x036f) || // Combining Diacritical Marks
+    (code >= 0x1ab0 && code <= 0x1aff) || // Combining Diacritical Marks Extended
+    (code >= 0x1dc0 && code <= 0x1dff) || // Combining Diacritical Marks Supplement
+    (code >= 0x20d0 && code <= 0x20ff) || // Combining Diacritical Marks for Symbols
+    (code >= 0xfe20 && code <= 0xfe2f) || // Combining Half Marks
+    code === 0x200b || // Zero Width Space
+    code === 0x200c || // Zero Width Non-Joiner
+    code === 0x200d || // Zero Width Joiner
+    code === 0xfeff // Zero Width No-Break Space
+  ) {
+    return 0;
+  }
+
+  // Wide characters: CJK, fullwidth forms, emoji
+  if (
+    (code >= 0x1100 && code <= 0x115f) || // Hangul Jamo
+    (code >= 0x2600 && code <= 0x26ff) || // Miscellaneous Symbols
+    (code >= 0x2700 && code <= 0x27bf) || // Dingbats (includes ❤)
+    (code >= 0x2e80 && code <= 0x9fff) || // CJK
+    (code >= 0xac00 && code <= 0xd7a3) || // Hangul Syllables
+    (code >= 0xf900 && code <= 0xfaff) || // CJK Compatibility Ideographs
+    (code >= 0xfe10 && code <= 0xfe1f) || // Vertical forms
+    (code >= 0xfe30 && code <= 0xfe6f) || // CJK Compatibility Forms
+    (code >= 0xff00 && code <= 0xff60) || // Fullwidth Forms
+    (code >= 0xffe0 && code <= 0xffe6) || // Fullwidth Forms
+    (code >= 0x20000 && code <= 0x2fffd) || // CJK Extension B+
+    (code >= 0x30000 && code <= 0x3fffd) || // CJK Extension G+
+    (code >= 0x1f300 && code <= 0x1f9ff) || // Misc Symbols and Pictographs, Emoticons, etc.
+    (code >= 0x1fa00 && code <= 0x1faff) // Chess, symbols, etc.
+  ) {
+    return 2;
+  }
+
+  return 1;
+}
+
+/**
+ * Get visible width of string (accounting for ANSI codes and wide characters)
+ */
 export function visibleLength(str: string): number {
-  return stripAnsi(str).length;
+  const stripped = stripAnsi(str);
+  let width = 0;
+  for (const char of stripped) {
+    width += charWidth(char);
+  }
+  return width;
 }
 
 // Wrap text with style and reset
