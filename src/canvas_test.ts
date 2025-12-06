@@ -93,3 +93,38 @@ Deno.test("Canvas.vline draws vertical line", () => {
   assertEquals(canvas.get(0, 2)?.char, "|");
   assertEquals(canvas.get(0, 3)?.char, " ");
 });
+
+Deno.test("Canvas.text handles emoji (wide characters)", () => {
+  const canvas = new Canvas(20, 5);
+
+  canvas.text(0, 0, "🎉Hi");
+
+  // Emoji takes 2 cells
+  assertEquals(canvas.get(0, 0)?.char, "🎉");
+  assertEquals(canvas.get(1, 0)?.char, ""); // Placeholder for wide char
+  assertEquals(canvas.get(2, 0)?.char, "H");
+  assertEquals(canvas.get(3, 0)?.char, "i");
+});
+
+Deno.test("Canvas.text handles CJK characters", () => {
+  const canvas = new Canvas(20, 5);
+
+  canvas.text(0, 0, "你好");
+
+  assertEquals(canvas.get(0, 0)?.char, "你");
+  assertEquals(canvas.get(1, 0)?.char, ""); // Placeholder
+  assertEquals(canvas.get(2, 0)?.char, "好");
+  assertEquals(canvas.get(3, 0)?.char, ""); // Placeholder
+});
+
+Deno.test("Canvas.text handles mixed ASCII and emoji", () => {
+  const canvas = new Canvas(20, 5);
+
+  canvas.text(0, 0, "Hi🎉!");
+
+  assertEquals(canvas.get(0, 0)?.char, "H");
+  assertEquals(canvas.get(1, 0)?.char, "i");
+  assertEquals(canvas.get(2, 0)?.char, "🎉");
+  assertEquals(canvas.get(3, 0)?.char, ""); // Placeholder
+  assertEquals(canvas.get(4, 0)?.char, "!");
+});
