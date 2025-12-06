@@ -2,6 +2,7 @@
 
 import {
   bg,
+  charWidth,
   fg,
   stripAnsi,
   style as ansiStyle,
@@ -475,21 +476,57 @@ function normalizePadding(
 }
 
 function wrapText(text: string, width: number): string[] {
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let currentLine = "";
+  // Handle newlines first
+  const paragraphs = text.split("\n");
+  const result: string[] = [];
 
-  for (const word of words) {
-    if (currentLine.length + word.length + 1 <= width) {
-      currentLine += (currentLine ? " " : "") + word;
-    } else {
-      if (currentLine) lines.push(currentLine);
-      currentLine = word;
+  for (const paragraph of paragraphs) {
+    if (paragraph === "") {
+      result.push("");
+      continue;
     }
-  }
-  if (currentLine) lines.push(currentLine);
 
-  return lines;
+    const words = paragraph.split(" ");
+    let currentLine = "";
+    let currentWidth = 0;
+
+    for (const word of words) {
+      const wordWidth = visibleLength(word);
+
+      if (currentWidth + wordWidth + (currentLine ? 1 : 0) <= width) {
+        currentLine += (currentLine ? " " : "") + word;
+        currentWidth += wordWidth + (currentLine.length > wordWidth ? 1 : 0);
+      } else {
+        if (currentLine) result.push(currentLine);
+
+        // Handle words longer than width
+        if (wordWidth > width) {
+          let remaining = word;
+          while (visibleLength(remaining) > width) {
+            // Find break point
+            let breakPoint = 0;
+            let w = 0;
+            for (const char of remaining) {
+              const cw = charWidth(char);
+              if (w + cw > width) break;
+              w += cw;
+              breakPoint++;
+            }
+            result.push(remaining.slice(0, breakPoint));
+            remaining = remaining.slice(breakPoint);
+          }
+          currentLine = remaining;
+          currentWidth = visibleLength(remaining);
+        } else {
+          currentLine = word;
+          currentWidth = wordWidth;
+        }
+      }
+    }
+    if (currentLine) result.push(currentLine);
+  }
+
+  return result;
 }
 
 function truncateText(text: string, maxWidth: number): string {
@@ -517,4 +554,306 @@ function calculateColumnWidths(
     widths.push(Math.min(maxWidth, Math.floor(totalWidth / colCount) - 3));
   }
   return widths;
+}
+
+// ScrollBox - scrollable container for content taller than viewport
+export interface ScrollBoxProps {
+  scrollY: number;
+  contentHeight: number;
+  border?: BorderStyle;
+  borderColor?: string;
+  title?: string;
+  showScrollbar?: boolean;
+  child: Component;
+}
+
+export function ScrollBox(props: ScrollBoxProps): Component {
+  const border = props.border ?? "single";
+  const borderChars = borders[border];
+
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      // Draw border
+      if (borderChars) {
+        const bc = props.borderColor;
+
+        canvas.set(rect.x, rect.y, { char: borderChars.topLeft, fg: bc });
+        canvas.set(rect.x + rect.width - 1, rect.y, {
+          char: borderChars.topRight,
+          fg: bc,
+        });
+        canvas.set(rect.x, rect.y + rect.height - 1, {
+          char: borderChars.bottomLeft,
+          fg: bc,
+        });
+        canvas.set(rect.x + rect.width - 1, rect.y + rect.height - 1, {
+          char: borderChars.bottomRight,
+          fg: bc,
+        });
+
+        for (let x = 1; x < rect.width - 1; x++) {
+          canvas.set(rect.x + x, rect.y, {
+            char: borderChars.horizontal,
+            fg: bc,
+          });
+          canvas.set(rect.x + x, rect.y + rect.height - 1, {
+            char: borderChars.horizontal,
+            fg: bc,
+          });
+        }
+
+        for (let y = 1; y < rect.height - 1; y++) {
+          canvas.set(rect.x, rect.y + y, {
+            char: borderChars.vertical,
+            fg: bc,
+          });
+        }
+
+        if (props.title) {
+          const title = ` ${props.title} `;
+          canvas.text(rect.x + 2, rect.y, title, { fg: bc });
+        }
+      }
+
+      // Draw scrollbar
+      const borderOffset = borderChars ? 1 : 0;
+      const viewportHeight = rect.height - borderOffset * 2;
+      const showScrollbar = props.showScrollbar !== false &&
+        props.contentHeight > viewportHeight;
+
+      if (showScrollbar) {
+        const scrollbarX = rect.x + rect.width - 1;
+        const scrollRatio = props.scrollY /
+          Math.max(1, props.contentHeight - viewportHeight);
+        const thumbSize = Math.max(
+          1,
+          Math.floor(
+            (viewportHeight / props.contentHeight) * viewportHeight,
+          ),
+        );
+        const thumbPos = Math.floor(scrollRatio * (viewportHeight - thumbSize));
+
+        for (let y = 0; y < viewportHeight; y++) {
+          const isThumb = y >= thumbPos && y < thumbPos + thumbSize;
+          canvas.set(scrollbarX, rect.y + borderOffset + y, {
+            char: isThumb ? "█" : "░",
+            fg: props.borderColor,
+          });
+        }
+      }
+
+      // Render child with scroll offset (clipped to viewport)
+      const contentRect: Rect = {
+        x: rect.x + borderOffset,
+        y: rect.y + borderOffset - props.scrollY,
+        width: rect.width - borderOffset * 2 - (showScrollbar ? 1 : 0),
+        height: props.contentHeight,
+      };
+
+      // Create clipping by only rendering visible portion
+      // We render the full content but canvas.set will ignore out-of-bounds
+      props.child.render(canvas, contentRect);
+    },
+  };
+}
+
+// TextInput - editable text field
+export interface TextInputProps {
+  value: string;
+  cursorPos: number;
+  placeholder?: string;
+  style?: Style;
+  cursorStyle?: Style;
+  focused?: boolean;
+  width?: number;
+}
+
+export function TextInput(props: TextInputProps): Component {
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      const width = props.width ?? rect.width;
+      const value = props.value ||
+        (props.focused ? "" : props.placeholder ?? "");
+      const styleStr = props.style ? buildStyle(props.style) : undefined;
+      const isEmpty = !props.value && !props.focused;
+
+      // Calculate visible portion if text is longer than width
+      let displayValue = value;
+      let cursorX = props.cursorPos;
+
+      if (visibleLength(value) > width) {
+        // Scroll text to keep cursor visible
+        const start = Math.max(0, props.cursorPos - width + 1);
+        displayValue = value.slice(start, start + width);
+        cursorX = props.cursorPos - start;
+      }
+
+      // Render text
+      canvas.text(rect.x, rect.y, displayValue, {
+        fg: isEmpty ? colors.fg.gray : props.style?.fg,
+        bg: props.style?.bg,
+        style: styleStr,
+      });
+
+      // Render cursor if focused
+      if (props.focused) {
+        const cursorChar = cursorX < displayValue.length
+          ? displayValue[cursorX]
+          : " ";
+        canvas.set(rect.x + cursorX, rect.y, {
+          char: cursorChar,
+          fg: props.cursorStyle?.bg ?? colors.bg.white,
+          bg: props.cursorStyle?.fg ?? colors.fg.black,
+          style: buildStyle(props.cursorStyle ?? { bold: true }),
+        });
+      }
+
+      // Fill remaining width with spaces
+      for (let i = visibleLength(displayValue); i < width; i++) {
+        canvas.set(rect.x + i, rect.y, {
+          char: " ",
+          bg: props.style?.bg,
+        });
+      }
+    },
+  };
+}
+
+// Focus management helpers
+export interface FocusableItem {
+  id: string;
+  component: Component;
+}
+
+export interface FocusContainerProps {
+  items: FocusableItem[];
+  focusedId: string;
+  focusedStyle?: Style;
+  direction?: "horizontal" | "vertical";
+  gap?: number;
+}
+
+export function FocusContainer(props: FocusContainerProps): Component {
+  const direction = props.direction ?? "vertical";
+  const gap = props.gap ?? 0;
+
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      let offset = 0;
+
+      for (const item of props.items) {
+        const isFocused = item.id === props.focusedId;
+
+        if (direction === "vertical") {
+          const itemRect: Rect = {
+            x: rect.x,
+            y: rect.y + offset,
+            width: rect.width,
+            height: 1,
+          };
+
+          if (isFocused && props.focusedStyle) {
+            // Draw focus indicator
+            canvas.text(itemRect.x, itemRect.y, "▸", {
+              fg: props.focusedStyle.fg,
+              style: buildStyle(props.focusedStyle),
+            });
+            itemRect.x += 2;
+            itemRect.width -= 2;
+          }
+
+          item.component.render(canvas, itemRect);
+          offset += 1 + gap;
+        } else {
+          // Horizontal layout - each item gets equal width
+          const itemWidth = Math.floor(
+            (rect.width - gap * (props.items.length - 1)) / props.items.length,
+          );
+          const itemRect: Rect = {
+            x: rect.x + offset,
+            y: rect.y,
+            width: itemWidth,
+            height: rect.height,
+          };
+
+          if (isFocused && props.focusedStyle?.bg) {
+            canvas.fill(
+              itemRect.x,
+              itemRect.y,
+              itemRect.width,
+              itemRect.height,
+              " ",
+              { bg: props.focusedStyle.bg },
+            );
+          }
+
+          item.component.render(canvas, itemRect);
+          offset += itemWidth + gap;
+        }
+      }
+    },
+  };
+}
+
+// Divider - horizontal or vertical line separator
+export interface DividerProps {
+  direction?: "horizontal" | "vertical";
+  char?: string;
+  style?: Style;
+}
+
+export function Divider(props: DividerProps = {}): Component {
+  const direction = props.direction ?? "horizontal";
+  const char = props.char ?? (direction === "horizontal" ? "─" : "│");
+
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      if (direction === "horizontal") {
+        canvas.hline(rect.x, rect.y, rect.width, char, {
+          fg: props.style?.fg,
+          bg: props.style?.bg,
+        });
+      } else {
+        canvas.vline(rect.x, rect.y, rect.height, char, {
+          fg: props.style?.fg,
+          bg: props.style?.bg,
+        });
+      }
+    },
+  };
+}
+
+// Spacer - empty space that can flex
+export interface SpacerProps {
+  width?: number;
+  height?: number;
+}
+
+export function Spacer(props: SpacerProps = {}): Component {
+  return {
+    render(_canvas: Canvas, _rect: Rect) {
+      // Spacer doesn't render anything - it just takes up space
+    },
+    width: props.width,
+    height: props.height,
+  } as Component & { width?: number; height?: number };
+}
+
+// Badge - small label with background
+export interface BadgeProps {
+  text: string;
+  style?: Style;
+}
+
+export function Badge(props: BadgeProps): Component {
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      const text = ` ${props.text} `;
+      canvas.text(rect.x, rect.y, text, {
+        fg: props.style?.fg ?? colors.fg.black,
+        bg: props.style?.bg ?? colors.bg.white,
+        style: props.style ? buildStyle(props.style) : undefined,
+      });
+    },
+  };
 }
