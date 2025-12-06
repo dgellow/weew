@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { Canvas } from "./canvas.ts";
 
 Deno.test("Canvas constructor creates correct size", () => {

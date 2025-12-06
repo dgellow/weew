@@ -4,6 +4,7 @@
 // Core ANSI utilities
 export {
   bg,
+  charWidth,
   clear,
   CSI,
   cursor,
@@ -14,6 +15,13 @@ export {
   style,
   styled,
   visibleLength,
+} from "./src/ansi.ts";
+export type {
+  ClearCommands,
+  ColorCommands,
+  CursorCommands,
+  ScreenCommands,
+  StyleCommands,
 } from "./src/ansi.ts";
 
 // Terminal utilities
@@ -53,6 +61,8 @@ export {
 export type {
   BorderStyle,
   BoxProps,
+  ColorHelpers,
+  Colors,
   Component,
   ListProps,
   ProgressProps,
