@@ -7,7 +7,8 @@ dependencies.
 
 - **Simple functional API** - No classes to extend, no complex lifecycle
 - **Flexbox-like layouts** - Row, Column, Grid with gap, justify, align
-- **Built-in components** - Box, Text, List, Progress, Spinner, Table
+- **Built-in components** - Box, Text, List, Progress, Spinner, Table,
+  TextInput, ScrollBox, Badge, Divider
 - **Keyboard input** - Full key event handling with modifiers
 - **Diff-based rendering** - Only updates changed cells
 - **Resize handling** - Responds to terminal size changes
@@ -113,6 +114,69 @@ Table({
 });
 ```
 
+### TextInput
+
+```typescript
+TextInput({
+  value: state.text,
+  cursorPos: state.cursor,
+  placeholder: "Type here...",
+  focused: true,
+  width: 30,
+  style: { fg: colors.fg.white },
+  cursorStyle: { fg: colors.fg.black, bg: colors.bg.white },
+});
+```
+
+### ScrollBox
+
+```typescript
+ScrollBox({
+  scrollY: state.scroll,
+  contentHeight: 50,
+  border: "single",
+  title: "Scrollable",
+  showScrollbar: true,
+  child: Column(items.map((item) => ({ component: Text(item), height: 1 }))),
+});
+```
+
+### Divider
+
+```typescript
+Divider(); // Horizontal "─" line
+
+Divider({ direction: "vertical" }); // Vertical "│" line
+
+Divider({ char: "=", style: { fg: colors.fg.gray } });
+```
+
+### Badge
+
+```typescript
+Badge({ text: "OK" }); // " OK " with default black-on-white
+
+Badge({
+  text: "Error",
+  style: { fg: colors.fg.white, bg: colors.bg.red },
+});
+```
+
+### FocusContainer
+
+```typescript
+FocusContainer({
+  items: [
+    { id: "name", component: TextInput({ value: state.name, cursorPos: 0 }) },
+    { id: "email", component: TextInput({ value: state.email, cursorPos: 0 }) },
+  ],
+  focusedId: state.focused,
+  focusedStyle: { fg: colors.fg.cyan },
+  direction: "vertical",
+  gap: 1,
+});
+```
+
 ## Layout
 
 ### Row / Column
@@ -137,6 +201,55 @@ Grid({
   gap: 1,
   children: [Box(...), Box(...), Box(...), Box(...)],
 })
+```
+
+### Spacer
+
+A layout primitive that occupies space in Flex layouts. Returns a `FlexChild`.
+
+```typescript
+Row([
+  { component: Text("Left"), width: 10 },
+  Spacer({ flex: 1 }), // Pushes items apart
+  { component: Text("Right"), width: 10 },
+]);
+
+Spacer({ width: 5 }); // Fixed 5-column gap
+Spacer({ height: 2 }); // Fixed 2-row gap
+```
+
+### Positioned
+
+Absolute positioning within a parent rect.
+
+```typescript
+Positioned({
+  x: 5,
+  y: 3,
+  width: 10,
+  height: 1,
+  child: Text("At (5, 3)"),
+});
+
+Positioned({
+  right: 0,
+  bottom: 0,
+  width: 10,
+  height: 1,
+  child: Text("Bottom-right"),
+});
+```
+
+### Stack
+
+Renders multiple components at the same position (for overlays). Last child
+renders on top.
+
+```typescript
+Stack([
+  Box({ border: "single", fill: " " }),
+  Positioned({ x: 2, y: 1, width: 10, height: 1, child: Text("Overlay") }),
+]);
 ```
 
 ### Flex Properties
