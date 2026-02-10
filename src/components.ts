@@ -38,8 +38,6 @@ export function buildStyle(s: Style): string {
   if (s.dim) result += ansiStyle.dim;
   if (s.italic) result += ansiStyle.italic;
   if (s.underline) result += ansiStyle.underline;
-  if (s.fg) result += s.fg;
-  if (s.bg) result += s.bg;
   return result;
 }
 
@@ -405,12 +403,13 @@ export function Table(props: TableProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
       const { headers, rows, border = true } = props;
+      const separatorWidth = border ? 3 : 1; // " │ " vs " "
 
       // Calculate column widths
       const allRows = headers ? [headers, ...rows] : rows;
       const colCount = Math.max(...allRows.map((r) => r.length));
       const colWidths = props.columnWidths ??
-        calculateColumnWidths(allRows, rect.width, colCount);
+        calculateColumnWidths(allRows, rect.width, colCount, separatorWidth);
 
       let y = rect.y;
 
@@ -426,7 +425,10 @@ export function Table(props: TableProps): Component {
               ? buildStyle(props.headerStyle)
               : undefined,
           });
-          x += colWidths[i] + (border ? 3 : 1);
+          if (border && i < headers.length - 1) {
+            canvas.set(x + colWidths[i] + 1, y, { char: "│" });
+          }
+          x += colWidths[i] + separatorWidth;
         }
         y++;
 
@@ -435,7 +437,10 @@ export function Table(props: TableProps): Component {
           let x = rect.x;
           for (let i = 0; i < colWidths.length; i++) {
             canvas.hline(x, y, colWidths[i], "─");
-            x += colWidths[i] + 3;
+            if (i < colWidths.length - 1) {
+              canvas.set(x + colWidths[i] + 1, y, { char: "┼" });
+            }
+            x += colWidths[i] + separatorWidth;
           }
           y++;
         }
@@ -452,7 +457,10 @@ export function Table(props: TableProps): Component {
             fg: props.cellStyle?.fg,
             bg: props.cellStyle?.bg,
           });
-          x += (colWidths[i] ?? 10) + (border ? 3 : 1);
+          if (border && i < row.length - 1) {
+            canvas.set(x + (colWidths[i] ?? 10) + 1, y, { char: "│" });
+          }
+          x += (colWidths[i] ?? 10) + separatorWidth;
         }
         y++;
       }
@@ -495,7 +503,7 @@ function wrapText(text: string, width: number): string[] {
 
       if (currentWidth + wordWidth + (currentLine ? 1 : 0) <= width) {
         currentLine += (currentLine ? " " : "") + word;
-        currentWidth += wordWidth + (currentLine.length > wordWidth ? 1 : 0);
+        currentWidth = visibleLength(currentLine);
       } else {
         if (currentLine) result.push(currentLine);
 
@@ -531,27 +539,37 @@ function wrapText(text: string, width: number): string[] {
 
 function truncateText(text: string, maxWidth: number): string {
   const stripped = stripAnsi(text);
-  if (stripped.length <= maxWidth) return text;
-  return stripped.slice(0, maxWidth - 1) + "…";
+  if (visibleLength(stripped) <= maxWidth) return text;
+  let width = 0;
+  let i = 0;
+  for (const char of stripped) {
+    const w = charWidth(char);
+    if (width + w > maxWidth - 1) break;
+    width += w;
+    i++;
+  }
+  return [...stripped].slice(0, i).join("") + "…";
 }
 
 function padOrTruncate(text: string, width: number): string {
   const stripped = stripAnsi(text);
-  if (stripped.length > width) {
-    return stripped.slice(0, width - 1) + "…";
-  }
-  return text + " ".repeat(width - stripped.length);
+  const visWidth = visibleLength(stripped);
+  if (visWidth > width) return truncateText(text, width);
+  return text + " ".repeat(width - visWidth);
 }
 
 function calculateColumnWidths(
   rows: string[][],
   totalWidth: number,
   colCount: number,
+  separatorWidth: number,
 ): number[] {
   const widths: number[] = [];
   for (let i = 0; i < colCount; i++) {
     const maxWidth = Math.max(...rows.map((r) => visibleLength(r[i] ?? "")));
-    widths.push(Math.min(maxWidth, Math.floor(totalWidth / colCount) - 3));
+    widths.push(
+      Math.min(maxWidth, Math.floor(totalWidth / colCount) - separatorWidth),
+    );
   }
   return widths;
 }
@@ -642,17 +660,24 @@ export function ScrollBox(props: ScrollBoxProps): Component {
         }
       }
 
-      // Render child with scroll offset (clipped to viewport)
+      // Render child with scroll offset, clipped to viewport
+      const viewportWidth = rect.width - borderOffset * 2 -
+        (showScrollbar ? 1 : 0);
       const contentRect: Rect = {
         x: rect.x + borderOffset,
         y: rect.y + borderOffset - props.scrollY,
-        width: rect.width - borderOffset * 2 - (showScrollbar ? 1 : 0),
+        width: viewportWidth,
         height: props.contentHeight,
       };
 
-      // Create clipping by only rendering visible portion
-      // We render the full content but canvas.set will ignore out-of-bounds
+      canvas.pushClip({
+        x: rect.x + borderOffset,
+        y: rect.y + borderOffset,
+        width: viewportWidth,
+        height: viewportHeight,
+      });
       props.child.render(canvas, contentRect);
+      canvas.popClip();
     },
   };
 }
@@ -702,8 +727,8 @@ export function TextInput(props: TextInputProps): Component {
           : " ";
         canvas.set(rect.x + cursorX, rect.y, {
           char: cursorChar,
-          fg: props.cursorStyle?.bg ?? colors.bg.white,
-          bg: props.cursorStyle?.fg ?? colors.fg.black,
+          fg: props.cursorStyle?.bg ?? colors.fg.black,
+          bg: props.cursorStyle?.fg ?? colors.bg.white,
           style: buildStyle(props.cursorStyle ?? { bold: true }),
         });
       }
@@ -731,6 +756,7 @@ export interface FocusContainerProps {
   focusedStyle?: Style;
   direction?: "horizontal" | "vertical";
   gap?: number;
+  itemHeight?: number;
 }
 
 export function FocusContainer(props: FocusContainerProps): Component {
@@ -745,11 +771,12 @@ export function FocusContainer(props: FocusContainerProps): Component {
         const isFocused = item.id === props.focusedId;
 
         if (direction === "vertical") {
+          const h = props.itemHeight ?? 1;
           const itemRect: Rect = {
             x: rect.x,
             y: rect.y + offset,
             width: rect.width,
-            height: 1,
+            height: h,
           };
 
           if (isFocused && props.focusedStyle) {
@@ -763,7 +790,7 @@ export function FocusContainer(props: FocusContainerProps): Component {
           }
 
           item.component.render(canvas, itemRect);
-          offset += 1 + gap;
+          offset += h + gap;
         } else {
           // Horizontal layout - each item gets equal width
           const itemWidth = Math.floor(
@@ -821,22 +848,6 @@ export function Divider(props: DividerProps = {}): Component {
       }
     },
   };
-}
-
-// Spacer - empty space that can flex
-export interface SpacerProps {
-  width?: number;
-  height?: number;
-}
-
-export function Spacer(props: SpacerProps = {}): Component {
-  return {
-    render(_canvas: Canvas, _rect: Rect) {
-      // Spacer doesn't render anything - it just takes up space
-    },
-    width: props.width,
-    height: props.height,
-  } as Component & { width?: number; height?: number };
 }
 
 // Badge - small label with background

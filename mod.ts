@@ -58,7 +58,6 @@ export {
   List,
   Progress,
   ScrollBox,
-  Spacer,
   Spinner,
   Table,
   Text,
@@ -78,7 +77,6 @@ export type {
   ProgressProps,
   Rect,
   ScrollBoxProps,
-  SpacerProps,
   SpinnerProps,
   Style,
   TableProps,
@@ -95,6 +93,7 @@ export {
   Padding,
   Positioned,
   Row,
+  Spacer,
   Stack,
 } from "./src/layout.ts";
 export type {
@@ -107,10 +106,18 @@ export type {
   Justify,
   PaddingProps,
   PositionedProps,
+  SpacerProps,
 } from "./src/layout.ts";
 
 // Input handling
-export { isKey, KeyboardInput, keyEvents, Keys, readKey } from "./src/input.ts";
+export {
+  isKey,
+  KeyboardInput,
+  keyEvents,
+  Keys,
+  parseKeyEvent,
+  readKey,
+} from "./src/input.ts";
 export type { KeyEvent } from "./src/input.ts";
 
 // App runner

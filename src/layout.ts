@@ -18,7 +18,6 @@ export interface FlexProps {
   justify?: Justify;
   align?: Align;
   gap?: number;
-  wrap?: boolean;
   children: FlexChild[];
 }
 
@@ -62,7 +61,7 @@ export function Flex(props: FlexProps): Component {
         }
       }
 
-      const availableSpace = mainSize - totalFixed - gaps;
+      const availableSpace = Math.max(0, mainSize - totalFixed - gaps);
       const flexUnit = totalFlex > 0 ? availableSpace / totalFlex : 0;
 
       // Calculate child sizes
@@ -73,7 +72,7 @@ export function Flex(props: FlexProps): Component {
           sizes.push(fixedSize);
         } else {
           const flex = child.flex ?? 1;
-          let size = Math.floor(flexUnit * flex);
+          let size = Math.max(0, Math.floor(flexUnit * flex));
 
           // Apply constraints
           const minSize = isRow ? child.minWidth : child.minHeight;
@@ -236,6 +235,22 @@ export function Grid(props: GridProps): Component {
         });
       }
     },
+  };
+}
+
+// Spacer - empty space for flex layouts
+export interface SpacerProps {
+  width?: number;
+  height?: number;
+  flex?: number;
+}
+
+export function Spacer(props: SpacerProps = {}): FlexChild {
+  return {
+    component: { render() {} },
+    width: props.width,
+    height: props.height,
+    flex: props.flex,
   };
 }
 

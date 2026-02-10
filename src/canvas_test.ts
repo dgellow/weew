@@ -128,3 +128,70 @@ Deno.test("Canvas.text handles mixed ASCII and emoji", () => {
   assertEquals(canvas.get(3, 0)?.char, ""); // Placeholder
   assertEquals(canvas.get(4, 0)?.char, "!");
 });
+
+Deno.test("Canvas.pushClip/popClip enforces clip bounds", () => {
+  const canvas = new Canvas(10, 10);
+
+  canvas.pushClip({ x: 2, y: 2, width: 4, height: 4 });
+
+  // Inside clip region - should work
+  canvas.set(2, 2, { char: "A" });
+  canvas.set(5, 5, { char: "B" });
+  assertEquals(canvas.get(2, 2)?.char, "A");
+  assertEquals(canvas.get(5, 5)?.char, "B");
+
+  // Outside clip region - should be ignored
+  canvas.set(0, 0, { char: "X" });
+  canvas.set(6, 6, { char: "Y" });
+  canvas.set(1, 3, { char: "Z" });
+  assertEquals(canvas.get(0, 0)?.char, " "); // Not set
+  assertEquals(canvas.get(6, 6)?.char, " "); // Not set
+  assertEquals(canvas.get(1, 3)?.char, " "); // Not set
+
+  canvas.popClip();
+
+  // After pop, should work everywhere again
+  canvas.set(0, 0, { char: "X" });
+  assertEquals(canvas.get(0, 0)?.char, "X");
+});
+
+Deno.test("Canvas.clear resets cells with styles", () => {
+  const canvas = new Canvas(5, 3);
+
+  canvas.set(0, 0, { char: "A", fg: "red", bg: "blue", style: "bold" });
+  assertEquals(canvas.get(0, 0)?.fg, "red");
+
+  canvas.clear();
+
+  assertEquals(canvas.get(0, 0)?.char, " ");
+  assertEquals(canvas.get(0, 0)?.fg, undefined);
+  assertEquals(canvas.get(0, 0)?.bg, undefined);
+  assertEquals(canvas.get(0, 0)?.style, undefined);
+});
+
+Deno.test("Canvas.pushClip nested clips", () => {
+  const canvas = new Canvas(10, 10);
+
+  canvas.pushClip({ x: 1, y: 1, width: 8, height: 8 });
+  canvas.pushClip({ x: 3, y: 3, width: 4, height: 4 });
+
+  // Inside inner clip - should work
+  canvas.set(4, 4, { char: "A" });
+  assertEquals(canvas.get(4, 4)?.char, "A");
+
+  // Inside outer but outside inner - should be clipped
+  canvas.set(2, 2, { char: "B" });
+  assertEquals(canvas.get(2, 2)?.char, " ");
+
+  canvas.popClip();
+
+  // After popping inner, outer clip applies
+  canvas.set(2, 2, { char: "C" });
+  assertEquals(canvas.get(2, 2)?.char, "C");
+
+  // Outside outer clip - still clipped
+  canvas.set(0, 0, { char: "D" });
+  assertEquals(canvas.get(0, 0)?.char, " ");
+
+  canvas.popClip();
+});

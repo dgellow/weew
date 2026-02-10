@@ -154,7 +154,7 @@ export const screen: ScreenCommands = {
 
 // Strip ANSI codes from string
 // deno-lint-ignore no-control-regex
-const ANSI_REGEX = /\x1b\[[0-9;]*[a-zA-Z]/g;
+const ANSI_REGEX = /\x1b(?:\[[0-9;?]*[a-zA-Z~]|\].*?(?:\x07|\x1b\\)|\([A-Z])/g;
 
 export function stripAnsi(str: string): string {
   return str.replace(ANSI_REGEX, "");

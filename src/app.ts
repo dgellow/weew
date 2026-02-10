@@ -140,28 +140,46 @@ export class App<S> {
     this.canvas.render();
   }
 
+  private safeCleanup(): void {
+    try {
+      this.cleanup();
+    } catch {
+      // Best-effort: cleanup touches terminal I/O which could fail
+    }
+  }
+
   private handleKey = (event: KeyEvent): void => {
-    const newState = this.config.onKey(event, this.state, this.ctx);
-    if (newState !== undefined) {
-      this.state = newState;
-      this.needsRender = true;
+    try {
+      const newState = this.config.onKey(event, this.state, this.ctx);
+      if (newState !== undefined) {
+        this.state = newState;
+        this.needsRender = true;
+      }
+    } catch (e) {
+      this.safeCleanup();
+      throw e;
     }
   };
 
   private handleTick = (): void => {
     if (!this.running) return;
 
-    const now = performance.now();
-    const delta = now - this.lastTick;
-    this.lastTick = now;
+    try {
+      const now = performance.now();
+      const delta = now - this.lastTick;
+      this.lastTick = now;
 
-    const newState = this.config.onTick(this.state, delta, this.ctx);
-    if (newState !== undefined) {
-      this.state = newState;
-      this.needsRender = true;
+      const newState = this.config.onTick(this.state, delta, this.ctx);
+      if (newState !== undefined) {
+        this.state = newState;
+        this.needsRender = true;
+      }
+
+      this.renderFrame();
+    } catch (e) {
+      this.safeCleanup();
+      throw e;
     }
-
-    this.renderFrame();
 
     if (this.running) {
       this.tickTimer = setTimeout(this.handleTick, this.config.tickInterval);
@@ -169,16 +187,21 @@ export class App<S> {
   };
 
   private handleResize = (): void => {
-    const size = getSize();
-    this.canvas.resize(size.columns, size.rows);
+    try {
+      const size = getSize();
+      this.canvas.resize(size.columns, size.rows);
 
-    const newState = this.config.onResize(size, this.state, this.ctx);
-    if (newState !== undefined) {
-      this.state = newState;
+      const newState = this.config.onResize(size, this.state, this.ctx);
+      if (newState !== undefined) {
+        this.state = newState;
+      }
+
+      this.needsRender = true;
+      this.renderFrame();
+    } catch (e) {
+      this.safeCleanup();
+      throw e;
     }
-
-    this.needsRender = true;
-    this.renderFrame();
   };
 
   async run(): Promise<void> {

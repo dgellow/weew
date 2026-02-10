@@ -66,3 +66,23 @@ Deno.test("visibleLength handles mixed ANSI and wide chars", () => {
   assertEquals(visibleLength("\x1b[31m你好\x1b[0m"), 4);
   assertEquals(visibleLength("hello\x1b[1m世界\x1b[0m"), 9); // 5 + 4
 });
+
+Deno.test("stripAnsi handles private mode sequences with ?", () => {
+  assertEquals(stripAnsi("\x1b[?25h"), ""); // Show cursor
+  assertEquals(stripAnsi("\x1b[?25l"), ""); // Hide cursor
+  assertEquals(stripAnsi("\x1b[?1049h"), ""); // Alt screen
+  assertEquals(stripAnsi("text\x1b[?25hmore"), "textmore");
+});
+
+Deno.test("stripAnsi handles tilde-terminated sequences", () => {
+  assertEquals(stripAnsi("\x1b[3~"), ""); // Delete key
+  assertEquals(stripAnsi("\x1b[5~"), ""); // Page up
+  assertEquals(stripAnsi("\x1b[15~"), ""); // F5
+  assertEquals(stripAnsi("a\x1b[3~b"), "ab");
+});
+
+Deno.test("stripAnsi handles OSC sequences", () => {
+  assertEquals(stripAnsi("\x1b]0;title\x07"), ""); // OSC with BEL
+  assertEquals(stripAnsi("\x1b]0;title\x1b\\"), ""); // OSC with ST
+  assertEquals(stripAnsi("text\x1b]0;window title\x07more"), "textmore");
+});

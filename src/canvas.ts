@@ -3,6 +3,13 @@
 import { charWidth, cursor, stripAnsi, style } from "./ansi.ts";
 import { getSize, write } from "./terminal.ts";
 
+interface ClipRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface Cell {
   char: string;
   fg?: string;
@@ -11,8 +18,11 @@ export interface Cell {
 }
 
 export class Canvas {
+  private bufferA: Cell[][];
+  private bufferB: Cell[][];
   private buffer: Cell[][];
   private prevBuffer: Cell[][] | null = null;
+  private clipStack: ClipRect[] = [];
   width: number;
   height: number;
 
@@ -20,7 +30,9 @@ export class Canvas {
     const size = getSize();
     this.width = width ?? size.columns;
     this.height = height ?? size.rows;
-    this.buffer = this.createBuffer();
+    this.bufferA = this.createBuffer();
+    this.bufferB = this.createBuffer();
+    this.buffer = this.bufferA;
   }
 
   private createBuffer(): Cell[][] {
@@ -30,23 +42,50 @@ export class Canvas {
     );
   }
 
-  /** Clear the buffer */
+  /** Clear the buffer in-place */
   clear(): void {
-    this.buffer = this.createBuffer();
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const cell = this.buffer[y][x];
+        cell.char = " ";
+        cell.fg = undefined;
+        cell.bg = undefined;
+        cell.style = undefined;
+      }
+    }
   }
 
   /** Resize the canvas and clear buffers */
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    this.buffer = this.createBuffer();
+    this.bufferA = this.createBuffer();
+    this.bufferB = this.createBuffer();
+    this.buffer = this.bufferA;
     this.prevBuffer = null;
+  }
+
+  /** Push a clip region onto the stack */
+  pushClip(rect: ClipRect): void {
+    this.clipStack.push(rect);
+  }
+
+  /** Pop the top clip region from the stack */
+  popClip(): void {
+    this.clipStack.pop();
   }
 
   /** Set a cell at position */
   set(x: number, y: number, cell: Cell): void {
     const xi = Math.floor(x);
     const yi = Math.floor(y);
+    if (this.clipStack.length > 0) {
+      const clip = this.clipStack[this.clipStack.length - 1];
+      if (
+        xi < clip.x || xi >= clip.x + clip.width ||
+        yi < clip.y || yi >= clip.y + clip.height
+      ) return;
+    }
     if (xi >= 0 && xi < this.width && yi >= 0 && yi < this.height) {
       this.buffer[yi][xi] = cell;
     }
@@ -151,45 +190,65 @@ export class Canvas {
 
   /** Render to terminal with diff-based updates */
   render(): void {
-    let output = "";
+    const parts: string[] = [];
+    let penX = -1, penY = -1;
+    let curStyle: string | undefined,
+      curFg: string | undefined,
+      curBg: string | undefined;
 
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
         const cell = this.buffer[y][x];
-        const prevCell = this.prevBuffer?.[y]?.[x];
+        const prev = this.prevBuffer?.[y]?.[x];
 
         // Skip empty placeholder cells (second half of wide characters)
         if (cell.char === "") continue;
 
         // Skip if cell hasn't changed
         if (
-          prevCell &&
-          prevCell.char === cell.char &&
-          prevCell.fg === cell.fg &&
-          prevCell.bg === cell.bg &&
-          prevCell.style === cell.style
+          prev &&
+          prev.char === cell.char &&
+          prev.fg === cell.fg &&
+          prev.bg === cell.bg &&
+          prev.style === cell.style
         ) {
           continue;
         }
 
-        // Move cursor and write cell
-        output += cursor.to(x, y);
-        if (cell.style) output += cell.style;
-        if (cell.fg) output += cell.fg;
-        if (cell.bg) output += cell.bg;
-        output += cell.char;
-        output += style.reset;
+        // Reposition cursor if needed
+        if (penX !== x || penY !== y) {
+          if (parts.length > 0) parts.push(style.reset);
+          parts.push(cursor.to(x, y));
+          curStyle = curFg = curBg = undefined;
+        }
+
+        // Only emit style codes when they change
+        if (
+          cell.style !== curStyle || cell.fg !== curFg || cell.bg !== curBg
+        ) {
+          parts.push(style.reset);
+          if (cell.style) parts.push(cell.style);
+          if (cell.fg) parts.push(cell.fg);
+          if (cell.bg) parts.push(cell.bg);
+          curStyle = cell.style;
+          curFg = cell.fg;
+          curBg = cell.bg;
+        }
+
+        parts.push(cell.char);
+        penX = x + (charWidth(cell.char) > 1 ? 2 : 1);
+        penY = y;
       }
     }
 
-    if (output) {
-      write(output);
+    if (parts.length > 0) {
+      parts.push(style.reset);
+      write(parts.join(""));
     }
 
-    // Save current buffer as previous
-    this.prevBuffer = this.buffer.map((row) =>
-      row.map((cell) => ({ ...cell }))
-    );
+    // Swap buffers
+    this.prevBuffer = this.buffer;
+    this.buffer = this.buffer === this.bufferA ? this.bufferB : this.bufferA;
   }
 
   /** Force full redraw (ignores diff) */
