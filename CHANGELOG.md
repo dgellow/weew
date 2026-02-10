@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+### Chores
+
+- fix package name
+
 ## 0.1.2
 
 ### Chores
