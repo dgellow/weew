@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.0
+
+### ⚠️ Breaking Changes
+
+- remove state from App, fix Shift+Tab, case-sensitive isKey
+
+BREAKING CHANGES:<br>
+App no longer manages state. User owns state via closures:
+- AppConfig/AppContext/TestDriver lose generic &lt;S&gt; parameter
+- Callbacks: onKey(event, ctx), onTick(delta, ctx), render(ctx)
+- No initialState, no setState, no state returns
+- No tick loop unless onTick is provided; ctx.render() renders directly<br>
+handleFocusGroup simplified to match closure architecture:
+- FocusItem/FocusGroupConfig/FocusGroupResult lose generic &lt;S&gt;
+- apply is now (update) =&gt; void, no state threading
+- No state parameter or return<br>
+isKey() and matchesKeySpec() are now case-sensitive, enabling
+vim-style bindings (g vs G).<br>
+Bug fixes:
+- Parse Shift+Tab (CSI Z / ESC [ Z) in both plain and modified forms<br>
+New:
+- TestDriver.type() sends each character as individual key events
+- CLAUDE.md with design philosophy and architecture overview
+
+### Features
+
+- custom navigation keys, VirtualList input, JSDoc, tests, benchmarks <details><summary>Details</summary>
+  - Add NavigationKeys type and keys/pageSize props to List and VirtualList
+    for custom key bindings (j/k, Ctrl+d/u) and PageUp/PageDown support
+  - Change VirtualList to return InputComponent&lt;VirtualListUpdate&gt; with
+    handleKey navigation and automatic scroll-into-view
+  - Add TestDriver.sendKeys() and findText() convenience methods
+  - Add JSDoc to all exported symbols across all source files
+  - Add ~100 new tests: app_test.ts, focus_test.ts, expanded ansi/canvas/
+    components/layout/test_driver tests
+  - Add ~18 new benchmarks: toAnsi, input parsing, focus routing, more
+    components, real-world dashboard scenario
+  - Add bench task to deno.json
+  - Export NavigationKeys and VirtualListUpdate from mod.ts
+</details>
+
+
 ## 0.2.0
 
 ### Features
