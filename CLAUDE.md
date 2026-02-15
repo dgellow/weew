@@ -14,9 +14,11 @@ A lightweight terminal UI library for Deno.
 
 ## Architecture
 
-- **Library, not framework.** Inspired by ratatui: user owns state and controls
-  the loop. App handles terminal plumbing (alt screen, raw mode, event loop,
-  render scheduling) but NOT state management.
+- **Library, not framework.** Inspired by ratatui: user owns state and the event
+  loop. Screen handles terminal plumbing (alt screen, raw mode, cursor). `run()`
+  is convenience sugar on top of Screen for callback-style apps.
+- **Injectable I/O.** Screen accepts a ScreenIO interface for testability.
+  TestScreenIO provides headless testing. No real terminal needed for tests.
 - **Canvas double-buffering.** Canvas uses bufferA/bufferB swap with in-place
   clear for efficient rendering.
 - **Component pattern.** Components implement `{ render(canvas, rect) }`.
@@ -34,14 +36,14 @@ A lightweight terminal UI library for Deno.
 | `src/layout.ts`      | Layout primitives (Row, Column, Flex, Grid, etc.)  |
 | `src/input.ts`       | Keyboard event parsing from raw terminal bytes     |
 | `src/focus.ts`       | Focus group management for Tab navigation          |
-| `src/app.ts`         | App runner — terminal lifecycle and event loop     |
-| `src/test_driver.ts` | Headless driver for testing without a terminal     |
+| `src/screen.ts`      | Screen — terminal session with draw + event stream |
+| `src/run.ts`         | run() — callback-style sugar over Screen           |
+| `src/test_driver.ts` | TestDriver — headless driver for run()-style apps  |
 | `src/terminal.ts`    | Terminal I/O (raw mode, size, alt screen)          |
 
 ## Verification
 
 ```
-deno fmt --check && deno lint && deno check mod.ts && deno test --allow-all src/*_test.ts
+./scripts/lint
+./scripts/test
 ```
-
-Also verify examples compile: `deno check examples/*.ts`

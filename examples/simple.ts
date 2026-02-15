@@ -17,9 +17,9 @@ await run({
       }),
     }),
 
-  onKey: (event, ctx) => {
+  onKey: (event, ctrl) => {
     if (isKey(event, "q")) {
-      ctx.exit();
+      ctrl.exit();
       return;
     }
 

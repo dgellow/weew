@@ -169,9 +169,18 @@ export {
 } from "./src/input.ts";
 export type { KeyEvent } from "./src/input.ts";
 
-// App runner
-export { App, renderOnce, run } from "./src/app.ts";
-export type { AppConfig, AppContext, RenderContext } from "./src/app.ts";
+// Screen — low-level terminal session
+export { Screen, TestScreenIO } from "./src/screen.ts";
+export type {
+  RenderContext,
+  ScreenConfig,
+  ScreenEvent,
+  ScreenIO,
+} from "./src/screen.ts";
+
+// run() — convenience wrapper over Screen
+export { renderOnce, run } from "./src/run.ts";
+export type { RunConfig, RunControl } from "./src/run.ts";
 
 // Testing
 export { TestDriver } from "./src/test_driver.ts";

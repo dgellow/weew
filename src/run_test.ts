@@ -18,7 +18,7 @@ Deno.test("onKey triggers re-render", () => {
 
   driver.sendKey("x");
   assertEquals(label, "world");
-  assertEquals(driver.findText("world"), true);
+  assertEquals(driver.text.includes("world"), true);
 });
 
 Deno.test("sendKey always re-renders", () => {
@@ -39,12 +39,12 @@ Deno.test("sendKey always re-renders", () => {
   assertEquals(renderCount, countAfterInit + 1);
 });
 
-Deno.test("ctx.exit() stops app", () => {
+Deno.test("ctrl.exit() stops app", () => {
   const driver = new TestDriver(
     {
       render: () => Text("running"),
-      onKey: (_event, ctx) => {
-        ctx.exit();
+      onKey: (_event, ctrl) => {
+        ctrl.exit();
       },
     },
     20,
@@ -56,7 +56,7 @@ Deno.test("ctx.exit() stops app", () => {
   assertEquals(driver.running, false);
 });
 
-Deno.test("ctx.render() triggers immediate re-render", () => {
+Deno.test("ctrl.render() triggers immediate re-render", () => {
   let value = "before";
   const driver = new TestDriver(
     {
@@ -66,18 +66,18 @@ Deno.test("ctx.render() triggers immediate re-render", () => {
     5,
   );
 
-  assertEquals(driver.findText("before"), true);
+  assertEquals(driver.text.includes("before"), true);
 
-  // Simulate async: mutate state and call ctx.render() directly
+  // Simulate async: mutate state and call ctrl.render() directly
   value = "after";
   driver.screen; // access to confirm no re-render yet
-  assertEquals(driver.findText("before"), true); // still old
+  assertEquals(driver.text.includes("before"), true); // still old
 
-  // ctx.render() should render immediately without needing driver.render()
+  // ctrl.render() should render immediately without needing driver.render()
   value = "async-updated";
   // We can't call ctx directly in this test setup, but driver.render() exercises the same path
   driver.render();
-  assertEquals(driver.findText("async-updated"), true);
+  assertEquals(driver.text.includes("async-updated"), true);
 });
 
 Deno.test("onTick advances state", () => {
@@ -97,7 +97,7 @@ Deno.test("onTick advances state", () => {
   assertEquals(elapsed, 100);
   driver.tick(50);
   assertEquals(elapsed, 150);
-  assertEquals(driver.findText("Elapsed: 150"), true);
+  assertEquals(driver.text.includes("Elapsed: 150"), true);
 });
 
 Deno.test("onResize handler called on resize", () => {
@@ -133,10 +133,10 @@ Deno.test("correct RenderContext dimensions", () => {
     20,
   );
 
-  assertEquals(driver.findText("60x20"), true);
+  assertEquals(driver.text.includes("60x20"), true);
 
   driver.resize(30, 10);
-  assertEquals(driver.findText("30x10"), true);
+  assertEquals(driver.text.includes("30x10"), true);
 });
 
 Deno.test("state persistence across multiple key events", () => {
@@ -156,7 +156,7 @@ Deno.test("state persistence across multiple key events", () => {
   driver.sendKey("b");
   driver.sendKey("c");
   assertEquals(items, ["a", "b", "c"]);
-  assertEquals(driver.findText("a,b,c"), true);
+  assertEquals(driver.text.includes("a,b,c"), true);
 });
 
 Deno.test("app with no optional handlers works", () => {
@@ -168,13 +168,13 @@ Deno.test("app with no optional handlers works", () => {
     5,
   );
 
-  assertEquals(driver.findText("defaults"), true);
+  assertEquals(driver.text.includes("defaults"), true);
   // sendKey should not crash with no onKey handler
   driver.sendKey("x");
-  assertEquals(driver.findText("defaults"), true);
+  assertEquals(driver.text.includes("defaults"), true);
   // tick should not crash with no onTick handler
   driver.tick(16);
-  assertEquals(driver.findText("defaults"), true);
+  assertEquals(driver.text.includes("defaults"), true);
 });
 
 Deno.test("sendKeys sends multiple keys in sequence", () => {
@@ -192,10 +192,10 @@ Deno.test("sendKeys sends multiple keys in sequence", () => {
 
   driver.sendKeys("Up", "Up", "Up");
   assertEquals(count, 3);
-  assertEquals(driver.findText("Count: 3"), true);
+  assertEquals(driver.text.includes("Count: 3"), true);
 });
 
-Deno.test("findText returns true/false correctly", () => {
+Deno.test("driver.text.includes finds rendered content", () => {
   const driver = new TestDriver(
     {
       render: () =>
@@ -208,9 +208,9 @@ Deno.test("findText returns true/false correctly", () => {
     5,
   );
 
-  assertEquals(driver.findText("Hello"), true);
-  assertEquals(driver.findText("World"), true);
-  assertEquals(driver.findText("Goodbye"), true);
-  assertEquals(driver.findText("Missing"), false);
-  assertEquals(driver.findText("hello"), false); // case-sensitive
+  assertEquals(driver.text.includes("Hello"), true);
+  assertEquals(driver.text.includes("World"), true);
+  assertEquals(driver.text.includes("Goodbye"), true);
+  assertEquals(driver.text.includes("Missing"), false);
+  assertEquals(driver.text.includes("hello"), false); // case-sensitive
 });

@@ -2,13 +2,14 @@
 
 import { Canvas } from "./canvas.ts";
 import type { Component, Rect } from "./components.ts";
-import type { AppConfig, AppContext, RenderContext } from "./app.ts";
+import type { RunConfig, RunControl } from "./run.ts";
+import type { RenderContext } from "./screen.ts";
 import type { KeyEvent } from "./input.ts";
 import type { TerminalSize } from "./terminal.ts";
 
 /**
  * Headless driver for testing weew apps without a real terminal.
- * Accepts the same AppConfig as App but runs without terminal I/O.
+ * Accepts the same RunConfig as run() but runs without terminal I/O.
  */
 export class TestDriver {
   private _canvas: Canvas;
@@ -16,10 +17,10 @@ export class TestDriver {
   private _needsRender = true;
   private _width: number;
   private _height: number;
-  private config: Required<AppConfig>;
-  private readonly ctx: AppContext;
+  private config: Required<RunConfig>;
+  private readonly ctx: RunControl;
 
-  constructor(config: AppConfig, width = 80, height = 24) {
+  constructor(config: RunConfig, width = 80, height = 24) {
     this.config = {
       render: config.render,
       onKey: config.onKey ?? (() => {}),
@@ -118,11 +119,6 @@ export class TestDriver {
     for (const ch of text) {
       this.sendKey(ch);
     }
-  }
-
-  /** Returns true if the string appears anywhere in the screen text */
-  findText(text: string): boolean {
-    return this.text.includes(text);
   }
 
   /** Force a render and return screen as text */

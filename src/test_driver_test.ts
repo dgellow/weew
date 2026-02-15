@@ -83,8 +83,8 @@ Deno.test("TestDriver.exit stops the app", () => {
   const driver = new TestDriver(
     {
       render: () => Text(""),
-      onKey: (_event, ctx) => {
-        ctx.exit();
+      onKey: (_event, ctrl) => {
+        ctrl.exit();
       },
     },
     20,
@@ -153,34 +153,6 @@ Deno.test("TestDriver.sendKeys sends multiple keys in sequence", () => {
   assertTextAt(driver.screen, 0, 0, "Count: 5");
 });
 
-Deno.test("TestDriver.findText returns true when text is on screen", () => {
-  const driver = new TestDriver(
-    {
-      render: () => Text("Hello World"),
-    },
-    20,
-    5,
-  );
-
-  assertEquals(driver.findText("Hello"), true);
-  assertEquals(driver.findText("World"), true);
-  assertEquals(driver.findText("Hello World"), true);
-});
-
-Deno.test("TestDriver.findText returns false when text is absent", () => {
-  const driver = new TestDriver(
-    {
-      render: () => Text("Hello World"),
-    },
-    20,
-    5,
-  );
-
-  assertEquals(driver.findText("Goodbye"), false);
-  assertEquals(driver.findText("hello"), false); // case-sensitive
-  assertEquals(driver.findText("xyz"), false);
-});
-
 Deno.test("TestDriver.sendKeys processes each key through onKey", () => {
   const keysReceived: string[] = [];
   let log = "";
@@ -201,27 +173,6 @@ Deno.test("TestDriver.sendKeys processes each key through onKey", () => {
   assertEquals(log, "abc");
 });
 
-Deno.test("TestDriver.findText with text spanning part of screen", () => {
-  const driver = new TestDriver(
-    {
-      render: () =>
-        Column([
-          { component: Text("First line here"), height: 1 },
-          { component: Text("Second line here"), height: 1 },
-          { component: Text("Third line here"), height: 1 },
-        ]),
-    },
-    20,
-    5,
-  );
-
-  assertEquals(driver.findText("First"), true);
-  assertEquals(driver.findText("Second"), true);
-  assertEquals(driver.findText("Third"), true);
-  assertEquals(driver.findText("line here"), true);
-  assertEquals(driver.findText("Fourth"), false);
-});
-
 Deno.test("TestDriver.type sends each character", () => {
   let value = "";
   const driver = new TestDriver(
@@ -239,7 +190,7 @@ Deno.test("TestDriver.type sends each character", () => {
 
   driver.type("hello");
   assertEquals(value, "hello");
-  assertEquals(driver.findText("hello"), true);
+  assertEquals(driver.text.includes("hello"), true);
 });
 
 Deno.test("TestDriver.render forces re-render", () => {
@@ -252,8 +203,8 @@ Deno.test("TestDriver.render forces re-render", () => {
     5,
   );
 
-  assertEquals(driver.findText("before"), true);
+  assertEquals(driver.text.includes("before"), true);
   value = "after";
   driver.render();
-  assertEquals(driver.findText("after"), true);
+  assertEquals(driver.text.includes("after"), true);
 });

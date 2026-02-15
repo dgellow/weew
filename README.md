@@ -31,8 +31,8 @@ await run({
       child: Text(`Count: ${count}`),
     }),
 
-  onKey: (event, ctx) => {
-    if (isKey(event, "q")) ctx.exit();
+  onKey: (event, ctrl) => {
+    if (isKey(event, "q")) ctrl.exit();
     if (event.key === "Up") count++;
     if (event.key === "Down") count--;
   },
@@ -273,9 +273,9 @@ Stack([
 import { isKey, Keys } from "weew";
 
 // isKey is case-sensitive: isKey(event, "g") won't match "G"
-onKey: ((event, ctx) => {
+onKey: ((event, ctrl) => {
   // Check specific keys
-  if (isKey(event, "q")) ctx.exit();
+  if (isKey(event, "q")) ctrl.exit();
   if (isKey(event, "s", { ctrl: true })) save();
 
   // Arrow keys
@@ -283,7 +283,7 @@ onKey: ((event, ctx) => {
   if (event.key === Keys.Down) selected++;
 
   // Modifiers
-  if (event.ctrl && event.key === "c") ctx.exit();
+  if (event.ctrl && event.key === "c") ctrl.exit();
 });
 ```
 
@@ -315,15 +315,69 @@ bg.brightBlue;
 fg.color(196); // 256 color
 ```
 
-## App Configuration
+## Screen (Low-Level)
+
+Screen gives you full control over the event loop. You own the loop, Screen
+handles terminal setup/teardown and rendering.
+
+```typescript
+import { isKey, Screen, Text } from "weew";
+
+let count = 0;
+
+using screen = new Screen();
+
+screen.draw(() => Text(`Count: ${count}`));
+
+for await (const event of screen.events()) {
+  if (event.type === "key") {
+    if (isKey(event, "q")) break;
+    if (event.key === "Up") count++;
+    if (event.key === "Down") count--;
+  }
+  screen.draw(() => Text(`Count: ${count}`));
+}
+```
+
+Async is just `await` inside the loop:
+
+```typescript
+screen.draw(() => Text("Loading..."));
+const data = await fetchData();
+screen.draw(() => Text(data));
+```
+
+### Testing with TestScreenIO
+
+Screen accepts an injectable `io` for headless testing:
+
+```typescript
+import { Screen, TestScreenIO, Text } from "weew";
+
+const io = new TestScreenIO(80, 24);
+const screen = new Screen({ io });
+
+screen.draw(() => Text("Hello"));
+assertEquals(screen.canvas.toString().includes("Hello"), true);
+
+io.pushKey("q");
+io.close();
+for await (const event of screen.events()) {
+  // process events...
+}
+```
+
+## run() (Callback Style)
+
+`run()` is convenience sugar over Screen for callback-style apps:
 
 ```typescript
 run({
   render: (ctx) => Component,       // ctx has { width, height }
 
-  onKey: (event, ctx) => void,      // mutate your own state
+  onKey: (event, ctrl) => void,      // mutate your own state
 
-  onTick: (delta, ctx) => void,
+  onTick: (delta, ctrl) => void,
 
   tickInterval: 16,  // ms, default ~60fps
 
@@ -335,15 +389,15 @@ run({
 });
 ```
 
-### AppContext
+### RunControl
 
 ```typescript
-ctx.render(); // Request re-render (for async updates)
-ctx.exit(); // Exit app
-ctx.size(); // Get terminal size
+ctrl.render(); // Request re-render (for async updates)
+ctrl.exit(); // Exit and restore terminal
+ctrl.size(); // Get terminal size
 ```
 
-## Low-level API
+## One-off Rendering
 
 For one-off renders without the app loop:
 

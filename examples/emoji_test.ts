@@ -42,7 +42,7 @@ await run({
       ]),
     }),
 
-  onKey: (event, ctx) => {
-    if (event.key === "q") ctx.exit();
+  onKey: (event, ctrl) => {
+    if (event.key === "q") ctrl.exit();
   },
 });

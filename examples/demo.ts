@@ -133,9 +133,9 @@ await run({
     ], { gap: 0 });
   },
 
-  onKey: (event, ctx) => {
+  onKey: (event, ctrl) => {
     if (isKey(event, "q") || isKey(event, "c", { ctrl: true })) {
-      ctx.exit();
+      ctrl.exit();
       return;
     }
 
@@ -149,7 +149,7 @@ await run({
 
     if (event.key === Keys.Enter) {
       if (items[selected] === "Exit") {
-        ctx.exit();
+        ctrl.exit();
       }
     }
   },

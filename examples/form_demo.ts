@@ -119,10 +119,10 @@ await run({
       },
     ]),
 
-  onKey: (event, ctx) => {
+  onKey: (event, ctrl) => {
     // Quit
     if (event.key === "q" && event.ctrl) {
-      ctx.exit();
+      ctrl.exit();
       return;
     }
 

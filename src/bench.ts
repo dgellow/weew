@@ -522,7 +522,7 @@ Deno.bench("handleFocusGroup — Tab navigation (5 items)", () => {
   const items = Array.from({ length: 5 }, (_, i) => ({
     id: `item-${i}`,
     input: TextInput({ value: "", cursorPos: 0 }),
-    apply: (s: number) => s,
+    apply: () => {},
   }));
   const event = {
     key: "Tab",
@@ -532,14 +532,14 @@ Deno.bench("handleFocusGroup — Tab navigation (5 items)", () => {
     meta: false,
     raw: new Uint8Array(),
   };
-  handleFocusGroup({ items, focusedId: "item-2" }, event, 0);
+  handleFocusGroup({ items, focusedId: "item-2" }, event);
 });
 
 Deno.bench("handleFocusGroup — key routing to focused TextInput", () => {
   const items = [{
     id: "field",
     input: TextInput({ value: "hello world", cursorPos: 5 }),
-    apply: (_s: string, u: unknown) => (u as { value: string }).value,
+    apply: () => {},
   }];
   const event = {
     key: "a",
@@ -549,7 +549,7 @@ Deno.bench("handleFocusGroup — key routing to focused TextInput", () => {
     meta: false,
     raw: new Uint8Array(),
   };
-  handleFocusGroup({ items, focusedId: "field" }, event, "hello world");
+  handleFocusGroup({ items, focusedId: "field" }, event);
 });
 
 // ============================================================
