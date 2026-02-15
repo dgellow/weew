@@ -23,12 +23,22 @@ Deno.test("Keys constants", () => {
   assertEquals(Keys.Down, "Down");
 });
 
-Deno.test("isKey matches simple keys", () => {
+Deno.test("isKey matches simple keys (case-sensitive)", () => {
   const event = makeKeyEvent("q");
 
   assertEquals(isKey(event, "q"), true);
-  assertEquals(isKey(event, "Q"), true); // case insensitive
+  assertEquals(isKey(event, "Q"), false); // case-sensitive
   assertEquals(isKey(event, "x"), false);
+});
+
+Deno.test("isKey distinguishes g from G", () => {
+  const lower = makeKeyEvent("g");
+  const upper = makeKeyEvent("G", { shift: true });
+
+  assertEquals(isKey(lower, "g"), true);
+  assertEquals(isKey(lower, "G"), false);
+  assertEquals(isKey(upper, "G"), true);
+  assertEquals(isKey(upper, "g"), false);
 });
 
 Deno.test("isKey matches with ctrl modifier", () => {
@@ -49,8 +59,8 @@ Deno.test("isKey matches with alt modifier", () => {
 Deno.test("isKey matches with shift modifier", () => {
   const event = makeKeyEvent("A", { shift: true });
 
-  assertEquals(isKey(event, "a", { shift: true }), true);
-  assertEquals(isKey(event, "a", { shift: false }), false);
+  assertEquals(isKey(event, "A", { shift: true }), true);
+  assertEquals(isKey(event, "A", { shift: false }), false);
 });
 
 Deno.test("isKey matches multiple modifiers", () => {
@@ -168,4 +178,25 @@ Deno.test("parseKeyEvent: Alt+key", () => {
   const event = parseKeyEvent(new Uint8Array([0x1b, 0x78]));
   assertEquals(event.key, "x");
   assertEquals(event.alt, true);
+});
+
+// Shift+Tab (CSI Z) tests
+
+Deno.test("parseKeyEvent: Shift+Tab (CSI Z)", () => {
+  // ESC [ Z
+  const event = parseKeyEvent(new Uint8Array([0x1b, 0x5b, 0x5a]));
+  assertEquals(event.key, Keys.Tab);
+  assertEquals(event.shift, true);
+  assertEquals(event.ctrl, false);
+  assertEquals(event.alt, false);
+});
+
+Deno.test("parseKeyEvent: modified Shift+Tab (1;2Z)", () => {
+  // ESC [ 1 ; 2 Z
+  const encoder = new TextEncoder();
+  const bytes = new Uint8Array([0x1b, 0x5b, ...encoder.encode("1;2Z")]);
+  const event = parseKeyEvent(bytes);
+  assertEquals(event.key, Keys.Tab);
+  assertEquals(event.shift, true);
+  assertEquals(event.ctrl, false);
 });

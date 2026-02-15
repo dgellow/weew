@@ -121,7 +121,10 @@ export function parseKeyEvent(bytes: Uint8Array): KeyEvent {
       else if (seq === "D") key = Keys.Left;
       else if (seq === "H") key = Keys.Home;
       else if (seq === "F") key = Keys.End;
-      else if (seq === "2~") key = Keys.Insert;
+      else if (seq === "Z") {
+        key = Keys.Tab;
+        shift = true;
+      } else if (seq === "2~") key = Keys.Insert;
       else if (seq === "3~") key = Keys.Delete;
       else if (seq === "5~") key = Keys.PageUp;
       else if (seq === "6~") key = Keys.PageDown;
@@ -180,6 +183,7 @@ export function parseKeyEvent(bytes: Uint8Array): KeyEvent {
             else if (finalChar === "Q") key = Keys.F2;
             else if (finalChar === "R") key = Keys.F3;
             else if (finalChar === "S") key = Keys.F4;
+            else if (finalChar === "Z") key = Keys.Tab;
           }
         }
       }
@@ -335,9 +339,9 @@ export async function* keyEvents(): AsyncGenerator<KeyEvent> {
 
 /**
  * Check if a key event matches a specific key and optional modifiers.
- * Key comparison is case-insensitive. Modifier flags are only checked if specified.
+ * Key comparison is case-sensitive to support vim-style bindings (e.g. "g" vs "G").
  * @param event - The key event to check
- * @param key - The key name to match (case-insensitive)
+ * @param key - The key name to match (case-sensitive)
  * @param modifiers - Optional modifier flags to require
  */
 export function isKey(
@@ -345,7 +349,7 @@ export function isKey(
   key: string,
   modifiers?: { ctrl?: boolean; alt?: boolean; shift?: boolean },
 ): boolean {
-  if (event.key.toLowerCase() !== key.toLowerCase()) return false;
+  if (event.key !== key) return false;
   if (modifiers?.ctrl !== undefined && event.ctrl !== modifiers.ctrl) {
     return false;
   }

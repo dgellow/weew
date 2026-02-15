@@ -1404,13 +1404,12 @@ Deno.test("handleFocusGroup Tab cycles focus forward", () => {
   const result = handleFocusGroup(
     {
       items: [
-        { id: "a", input: input1, apply: (s) => s },
-        { id: "b", input: input2, apply: (s) => s },
+        { id: "a", input: input1, apply: () => {} },
+        { id: "b", input: input2, apply: () => {} },
       ],
       focusedId: "a",
     },
     key("Tab"),
-    {},
   );
   assertEquals(result.focusedId, "b");
   assertEquals(result.handled, true);
@@ -1422,13 +1421,12 @@ Deno.test("handleFocusGroup Shift+Tab cycles focus backward", () => {
   const result = handleFocusGroup(
     {
       items: [
-        { id: "a", input: input1, apply: (s) => s },
-        { id: "b", input: input2, apply: (s) => s },
+        { id: "a", input: input1, apply: () => {} },
+        { id: "b", input: input2, apply: () => {} },
       ],
       focusedId: "b",
     },
     key("Tab", { shift: true }),
-    {},
   );
   assertEquals(result.focusedId, "a");
   assertEquals(result.handled, true);
@@ -1440,14 +1438,13 @@ Deno.test("handleFocusGroup Tab wraps around with cycle", () => {
   const result = handleFocusGroup(
     {
       items: [
-        { id: "a", input: input1, apply: (s) => s },
-        { id: "b", input: input2, apply: (s) => s },
+        { id: "a", input: input1, apply: () => {} },
+        { id: "b", input: input2, apply: () => {} },
       ],
       focusedId: "b",
       cycle: true,
     },
     key("Tab"),
-    {},
   );
   assertEquals(result.focusedId, "a");
 });
@@ -1458,40 +1455,41 @@ Deno.test("handleFocusGroup Tab stays at end with cycle=false", () => {
   const result = handleFocusGroup(
     {
       items: [
-        { id: "a", input: input1, apply: (s) => s },
-        { id: "b", input: input2, apply: (s) => s },
+        { id: "a", input: input1, apply: () => {} },
+        { id: "b", input: input2, apply: () => {} },
       ],
       focusedId: "b",
       cycle: false,
     },
     key("Tab"),
-    {},
   );
   assertEquals(result.focusedId, "b");
 });
 
 Deno.test("handleFocusGroup routes key to focused item", () => {
-  interface S {
-    value: string;
-    cursorPos: number;
-  }
-  const input = TextInput({ value: "hello", cursorPos: 5 });
-  const result = handleFocusGroup<S>(
+  let value = "hello";
+  let cursorPos = 5;
+  const input = TextInput({ value, cursorPos });
+  const result = handleFocusGroup(
     {
       items: [
         {
           id: "field",
           input: input,
-          apply: (_s, u) => u as S,
+          apply: (u) => {
+            const update = u as { value: string; cursorPos: number };
+            value = update.value;
+            cursorPos = update.cursorPos;
+          },
         },
       ],
       focusedId: "field",
     },
     key("a"),
-    { value: "hello", cursorPos: 5 },
   );
   assertEquals(result.handled, true);
-  assertEquals(result.state, { value: "helloa", cursorPos: 6 });
+  assertEquals(value, "helloa");
+  assertEquals(cursorPos, 6);
 });
 
 Deno.test("handleFocusGroup bubbles unhandled events", () => {
@@ -1499,15 +1497,13 @@ Deno.test("handleFocusGroup bubbles unhandled events", () => {
   const result = handleFocusGroup(
     {
       items: [
-        { id: "a", input: input, apply: (s) => s },
+        { id: "a", input: input, apply: () => {} },
       ],
       focusedId: "a",
     },
     key("Escape"),
-    {},
   );
   assertEquals(result.handled, false);
-  assertEquals(result.state, undefined);
 });
 
 Deno.test("handleFocusGroup trap mode swallows unhandled events", () => {
@@ -1515,16 +1511,14 @@ Deno.test("handleFocusGroup trap mode swallows unhandled events", () => {
   const result = handleFocusGroup(
     {
       items: [
-        { id: "a", input: input, apply: (s) => s },
+        { id: "a", input: input, apply: () => {} },
       ],
       focusedId: "a",
       trap: true,
     },
     key("Escape"),
-    {},
   );
   assertEquals(result.handled, true);
-  assertEquals(result.state, undefined);
 });
 
 Deno.test("handleFocusGroup custom navigation keys", () => {
@@ -1533,8 +1527,8 @@ Deno.test("handleFocusGroup custom navigation keys", () => {
   const result = handleFocusGroup(
     {
       items: [
-        { id: "a", input: input1, apply: (s) => s },
-        { id: "b", input: input2, apply: (s) => s },
+        { id: "a", input: input1, apply: () => {} },
+        { id: "b", input: input2, apply: () => {} },
       ],
       focusedId: "a",
       navigationKeys: {
@@ -1543,7 +1537,6 @@ Deno.test("handleFocusGroup custom navigation keys", () => {
       },
     },
     key("Down"),
-    {},
   );
   assertEquals(result.focusedId, "b");
   assertEquals(result.handled, true);

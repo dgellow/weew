@@ -14,22 +14,13 @@ import {
   Text,
 } from "../mod.ts";
 
-interface State {
-  selected: number;
-  progress: number;
-  spinnerFrame: number;
-  items: string[];
-}
+let selected = 0;
+let progress = 0;
+let spinnerFrame = 0;
+const items = ["Dashboard", "Settings", "Profile", "Help", "Exit"];
 
-await run<State>({
-  initialState: {
-    selected: 0,
-    progress: 0,
-    spinnerFrame: 0,
-    items: ["Dashboard", "Settings", "Profile", "Help", "Exit"],
-  },
-
-  render: (state, { width, height }) => {
+await run({
+  render: ({ width, height }) => {
     return Column([
       // Header
       {
@@ -59,8 +50,8 @@ await run<State>({
               title: " Menu ",
               padding: 1,
               child: List({
-                items: state.items,
-                selected: state.selected,
+                items,
+                selected,
                 selectedStyle: { fg: colors.fg.cyan, bold: true },
                 itemStyle: { fg: colors.fg.white },
               }),
@@ -73,12 +64,12 @@ await run<State>({
             component: Box({
               border: "single",
               borderColor: colors.fg.green,
-              title: ` ${state.items[state.selected]} `,
+              title: ` ${items[selected]} `,
               padding: 1,
               child: Column([
                 {
                   component: Text({
-                    content: `Selected: ${state.items[state.selected]}`,
+                    content: `Selected: ${items[selected]}`,
                     style: { bold: true },
                   }),
                   height: 1,
@@ -94,7 +85,7 @@ await run<State>({
                   component: Row([
                     {
                       component: Spinner({
-                        frame: state.spinnerFrame,
+                        frame: spinnerFrame,
                         color: colors.fg.yellow,
                       }),
                       width: 2,
@@ -112,7 +103,7 @@ await run<State>({
                 },
                 {
                   component: Progress({
-                    value: state.progress,
+                    value: progress,
                     filledColor: colors.fg.green,
                     emptyColor: colors.fg.gray,
                     showPercent: true,
@@ -142,42 +133,30 @@ await run<State>({
     ], { gap: 0 });
   },
 
-  onKey: (event, state, ctx) => {
+  onKey: (event, ctx) => {
     if (isKey(event, "q") || isKey(event, "c", { ctrl: true })) {
       ctx.exit();
       return;
     }
 
     if (event.key === Keys.Up) {
-      return {
-        ...state,
-        selected: (state.selected - 1 + state.items.length) %
-          state.items.length,
-      };
+      selected = (selected - 1 + items.length) % items.length;
     }
 
     if (event.key === Keys.Down) {
-      return {
-        ...state,
-        selected: (state.selected + 1) % state.items.length,
-      };
+      selected = (selected + 1) % items.length;
     }
 
     if (event.key === Keys.Enter) {
-      if (state.items[state.selected] === "Exit") {
+      if (items[selected] === "Exit") {
         ctx.exit();
       }
     }
-
-    return undefined;
   },
 
-  onTick: (state) => {
-    return {
-      ...state,
-      spinnerFrame: state.spinnerFrame + 1,
-      progress: (state.progress + 0.5) % 101,
-    };
+  onTick: () => {
+    spinnerFrame++;
+    progress = (progress + 0.5) % 101;
   },
 
   tickInterval: 80,

@@ -19,22 +19,22 @@ dependencies.
 ```typescript
 import { Box, colors, isKey, run, Text } from "https://deno.land/x/weew/mod.ts";
 
-await run({
-  initialState: { count: 0 },
+let count = 0;
 
-  render: (state) =>
+await run({
+  render: () =>
     Box({
       border: "rounded",
       borderColor: colors.fg.cyan,
       title: " Counter ",
       padding: 1,
-      child: Text(`Count: ${state.count}`),
+      child: Text(`Count: ${count}`),
     }),
 
-  onKey: (event, state, ctx) => {
+  onKey: (event, ctx) => {
     if (isKey(event, "q")) ctx.exit();
-    if (event.key === "Up") return { count: state.count + 1 };
-    if (event.key === "Down") return { count: state.count - 1 };
+    if (event.key === "Up") count++;
+    if (event.key === "Down") count--;
   },
 });
 ```
@@ -272,14 +272,15 @@ Stack([
 ```typescript
 import { isKey, Keys } from "weew";
 
-onKey: ((event, state, ctx) => {
+// isKey is case-sensitive: isKey(event, "g") won't match "G"
+onKey: ((event, ctx) => {
   // Check specific keys
   if (isKey(event, "q")) ctx.exit();
   if (isKey(event, "s", { ctrl: true })) save();
 
   // Arrow keys
-  if (event.key === Keys.Up) return { selected: state.selected - 1 };
-  if (event.key === Keys.Down) return { selected: state.selected + 1 };
+  if (event.key === Keys.Up) selected--;
+  if (event.key === Keys.Down) selected++;
 
   // Modifiers
   if (event.ctrl && event.key === "c") ctx.exit();
@@ -317,14 +318,12 @@ fg.color(196); // 256 color
 ## App Configuration
 
 ```typescript
-run<State>({
-  initialState: { ... },
+run({
+  render: (ctx) => Component,       // ctx has { width, height }
 
-  render: (state, ctx) => Component,
+  onKey: (event, ctx) => void,      // mutate your own state
 
-  onKey: (event, state, ctx) => State | void,
-
-  onTick: (state, delta, ctx) => State | void,
+  onTick: (delta, ctx) => void,
 
   tickInterval: 16,  // ms, default ~60fps
 
@@ -332,18 +331,16 @@ run<State>({
 
   hideCursor: true,
 
-  onResize: (size, state, ctx) => State | void,
+  onResize: (size) => void,
 });
 ```
 
 ### AppContext
 
 ```typescript
-ctx.render()           // Request re-render
-ctx.setState(newState) // Update state
-ctx.setState(s => ...) // Functional update
-ctx.exit()             // Exit app
-ctx.size()             // Get terminal size
+ctx.render(); // Request re-render (for async updates)
+ctx.exit(); // Exit app
+ctx.size(); // Get terminal size
 ```
 
 ## Low-level API

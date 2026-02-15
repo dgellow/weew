@@ -659,7 +659,7 @@ export function Table(props: TableProps): Component {
 function matchesKeySpec(event: KeyEvent, spec: string): boolean {
   const parts = spec.split("+");
   const keyName = parts[parts.length - 1];
-  if (event.key.toLowerCase() !== keyName.toLowerCase()) return false;
+  if (event.key !== keyName) return false;
   if (parts.includes("Ctrl") && !event.ctrl) return false;
   if (parts.includes("Alt") && !event.alt) return false;
   if (parts.includes("Shift") && !event.shift) return false;

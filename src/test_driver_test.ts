@@ -7,8 +7,7 @@ import { assertRegion, assertTextAt } from "./test_helpers.ts";
 Deno.test("TestDriver renders initial state", () => {
   const driver = new TestDriver(
     {
-      initialState: { count: 0 },
-      render: (state) => Text(`Count: ${state.count}`),
+      render: () => Text("Count: 0"),
     },
     20,
     5,
@@ -17,15 +16,14 @@ Deno.test("TestDriver renders initial state", () => {
   assertTextAt(driver.screen, 0, 0, "Count: 0");
 });
 
-Deno.test("TestDriver.sendKey updates state", () => {
+Deno.test("TestDriver.sendKey updates via closure", () => {
+  let count = 0;
   const driver = new TestDriver(
     {
-      initialState: { count: 0 },
-      render: (state) => Text(`Count: ${state.count}`),
-      onKey: (event, state) => {
-        if (event.key === "Up") return { count: state.count + 1 };
-        if (event.key === "Down") return { count: state.count - 1 };
-        return undefined;
+      render: () => Text(`Count: ${count}`),
+      onKey: (event) => {
+        if (event.key === "Up") count++;
+        if (event.key === "Down") count--;
       },
     },
     20,
@@ -33,42 +31,43 @@ Deno.test("TestDriver.sendKey updates state", () => {
   );
 
   driver.sendKey("Up");
-  assertEquals(driver.state.count, 1);
+  assertEquals(count, 1);
   assertTextAt(driver.screen, 0, 0, "Count: 1");
 
   driver.sendKey("Up");
   driver.sendKey("Up");
-  assertEquals(driver.state.count, 3);
+  assertEquals(count, 3);
   assertTextAt(driver.screen, 0, 0, "Count: 3");
 
   driver.sendKey("Down");
-  assertEquals(driver.state.count, 2);
+  assertEquals(count, 2);
 });
 
 Deno.test("TestDriver.tick advances state", () => {
+  let frame = 0;
   const driver = new TestDriver(
     {
-      initialState: { frame: 0 },
-      render: (state) => Text(`Frame: ${state.frame}`),
-      onTick: (state, _delta) => ({ frame: state.frame + 1 }),
+      render: () => Text(`Frame: ${frame}`),
+      onTick: () => {
+        frame++;
+      },
     },
     20,
     5,
   );
 
   driver.tick(16);
-  assertEquals(driver.state.frame, 1);
+  assertEquals(frame, 1);
 
   driver.tick(16);
   driver.tick(16);
-  assertEquals(driver.state.frame, 3);
+  assertEquals(frame, 3);
 });
 
 Deno.test("TestDriver.resize updates dimensions", () => {
   const driver = new TestDriver(
     {
-      initialState: {},
-      render: (_state, ctx) => Text(`${ctx.width}x${ctx.height}`),
+      render: (ctx) => Text(`${ctx.width}x${ctx.height}`),
     },
     80,
     24,
@@ -83,11 +82,9 @@ Deno.test("TestDriver.resize updates dimensions", () => {
 Deno.test("TestDriver.exit stops the app", () => {
   const driver = new TestDriver(
     {
-      initialState: {},
       render: () => Text(""),
-      onKey: (_event, _state, ctx) => {
+      onKey: (_event, ctx) => {
         ctx.exit();
-        return undefined;
       },
     },
     20,
@@ -102,7 +99,6 @@ Deno.test("TestDriver.exit stops the app", () => {
 Deno.test("TestDriver renders complex layouts", () => {
   const driver = new TestDriver(
     {
-      initialState: {},
       render: () =>
         Box({
           border: "single",
@@ -123,7 +119,6 @@ Deno.test("TestDriver renders complex layouts", () => {
 Deno.test("TestDriver.text returns full screen text", () => {
   const driver = new TestDriver(
     {
-      initialState: {},
       render: () =>
         Column([
           { component: Text("Line 1"), height: 1 },
@@ -140,33 +135,13 @@ Deno.test("TestDriver.text returns full screen text", () => {
   assertEquals(lines[1].trimEnd(), "Line 2");
 });
 
-Deno.test("TestDriver.setState from handler triggers re-render", () => {
-  const driver = new TestDriver(
-    {
-      initialState: { msg: "before" },
-      render: (state) => Text(state.msg),
-      onKey: (_event, _state, ctx) => {
-        ctx.setState({ msg: "after" });
-        return undefined;
-      },
-    },
-    20,
-    5,
-  );
-
-  assertTextAt(driver.screen, 0, 0, "before");
-  driver.sendKey("x");
-  assertTextAt(driver.screen, 0, 0, "after");
-});
-
 Deno.test("TestDriver.sendKeys sends multiple keys in sequence", () => {
+  let count = 0;
   const driver = new TestDriver(
     {
-      initialState: { count: 0 },
-      render: (state) => Text(`Count: ${state.count}`),
-      onKey: (event, state) => {
-        if (event.key === "Up") return { count: state.count + 1 };
-        return undefined;
+      render: () => Text(`Count: ${count}`),
+      onKey: (event) => {
+        if (event.key === "Up") count++;
       },
     },
     20,
@@ -174,14 +149,13 @@ Deno.test("TestDriver.sendKeys sends multiple keys in sequence", () => {
   );
 
   driver.sendKeys("Up", "Up", "Up", "Up", "Up");
-  assertEquals(driver.state.count, 5);
+  assertEquals(count, 5);
   assertTextAt(driver.screen, 0, 0, "Count: 5");
 });
 
 Deno.test("TestDriver.findText returns true when text is on screen", () => {
   const driver = new TestDriver(
     {
-      initialState: {},
       render: () => Text("Hello World"),
     },
     20,
@@ -196,7 +170,6 @@ Deno.test("TestDriver.findText returns true when text is on screen", () => {
 Deno.test("TestDriver.findText returns false when text is absent", () => {
   const driver = new TestDriver(
     {
-      initialState: {},
       render: () => Text("Hello World"),
     },
     20,
@@ -210,13 +183,13 @@ Deno.test("TestDriver.findText returns false when text is absent", () => {
 
 Deno.test("TestDriver.sendKeys processes each key through onKey", () => {
   const keysReceived: string[] = [];
+  let log = "";
   const driver = new TestDriver(
     {
-      initialState: { log: "" },
-      render: (state) => Text(state.log),
-      onKey: (event, state) => {
+      render: () => Text(log),
+      onKey: (event) => {
         keysReceived.push(event.key);
-        return { log: state.log + event.key };
+        log += event.key;
       },
     },
     30,
@@ -225,13 +198,12 @@ Deno.test("TestDriver.sendKeys processes each key through onKey", () => {
 
   driver.sendKeys("a", "b", "c");
   assertEquals(keysReceived, ["a", "b", "c"]);
-  assertEquals(driver.state.log, "abc");
+  assertEquals(log, "abc");
 });
 
 Deno.test("TestDriver.findText with text spanning part of screen", () => {
   const driver = new TestDriver(
     {
-      initialState: {},
       render: () =>
         Column([
           { component: Text("First line here"), height: 1 },
@@ -248,4 +220,40 @@ Deno.test("TestDriver.findText with text spanning part of screen", () => {
   assertEquals(driver.findText("Third"), true);
   assertEquals(driver.findText("line here"), true);
   assertEquals(driver.findText("Fourth"), false);
+});
+
+Deno.test("TestDriver.type sends each character", () => {
+  let value = "";
+  const driver = new TestDriver(
+    {
+      render: () => Text(value),
+      onKey: (event) => {
+        if (event.key.length === 1 && !event.ctrl && !event.alt) {
+          value += event.key;
+        }
+      },
+    },
+    20,
+    5,
+  );
+
+  driver.type("hello");
+  assertEquals(value, "hello");
+  assertEquals(driver.findText("hello"), true);
+});
+
+Deno.test("TestDriver.render forces re-render", () => {
+  let value = "before";
+  const driver = new TestDriver(
+    {
+      render: () => Text(value),
+    },
+    20,
+    5,
+  );
+
+  assertEquals(driver.findText("before"), true);
+  value = "after";
+  driver.render();
+  assertEquals(driver.findText("after"), true);
 });

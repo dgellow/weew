@@ -3,17 +3,17 @@
 import type { KeyEvent } from "./input.ts";
 import type { InputComponent } from "./components.ts";
 
-/** An item in a focus group, binding an InputComponent to a state updater. */
-export interface FocusItem<S> {
+/** An item in a focus group, binding an InputComponent to an update callback. */
+export interface FocusItem {
   id: string;
   input: InputComponent<unknown>;
-  /** Map the component's update to a new app state */
-  apply: (state: S, update: unknown) => S;
+  /** Apply the component's update. Mutate your own state in this callback. */
+  apply: (update: unknown) => void;
 }
 
 /** Configuration for a focus group: items, navigation behavior, and trapping. */
-export interface FocusGroupConfig<S> {
-  items: FocusItem<S>[];
+export interface FocusGroupConfig {
+  items: FocusItem[];
   focusedId: string;
   /** Tab/Shift+Tab cycles (default: true) */
   cycle?: boolean;
@@ -27,8 +27,7 @@ export interface FocusGroupConfig<S> {
 }
 
 /** Result of handling a key event within a focus group. */
-export interface FocusGroupResult<S> {
-  state?: S;
+export interface FocusGroupResult {
   focusedId: string;
   handled: boolean;
 }
@@ -38,14 +37,12 @@ export interface FocusGroupResult<S> {
  * Handles Tab/Shift+Tab navigation between items and delegates other keys to the focused item's handleKey.
  * @param config - Focus group configuration (items, focused ID, cycle/trap behavior)
  * @param event - The key event to handle
- * @param state - Current application state
- * @returns The result with optional new state, updated focusedId, and whether the event was handled
+ * @returns The result with updated focusedId and whether the event was handled
  */
-export function handleFocusGroup<S>(
-  config: FocusGroupConfig<S>,
+export function handleFocusGroup(
+  config: FocusGroupConfig,
   event: KeyEvent,
-  state: S,
-): FocusGroupResult<S> {
+): FocusGroupResult {
   const { items, focusedId, trap = false } = config;
   const cycle = config.cycle ?? true;
 
@@ -81,8 +78,8 @@ export function handleFocusGroup<S>(
 
   const update = focused.input.handleKey(event);
   if (update !== undefined) {
-    const newState = focused.apply(state, update);
-    return { state: newState, focusedId, handled: true };
+    focused.apply(update);
+    return { focusedId, handled: true };
   }
 
   // Not handled

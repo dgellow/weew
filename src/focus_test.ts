@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import { handleFocusGroup } from "./focus.ts";
 import type { FocusItem } from "./focus.ts";
 import { Checkbox, List } from "./components.ts";
+import type { CheckboxUpdate, ListUpdate } from "./components.ts";
 import type { KeyEvent } from "./input.ts";
 
 function makeKeyEvent(
@@ -18,38 +19,25 @@ function makeKeyEvent(
   };
 }
 
-interface TestState {
-  checked: boolean;
-  selected: number;
-  name: string;
-  cursorPos: number;
-}
-
-function makeDefaultState(): TestState {
-  return { checked: false, selected: 0, name: "", cursorPos: 0 };
-}
-
 Deno.test("focus: empty items array returns handled=false", () => {
   const result = handleFocusGroup(
     { items: [], focusedId: "anything" },
     makeKeyEvent("Tab"),
-    {},
   );
   assertEquals(result.handled, false);
 });
 
 Deno.test("focus: Shift+Tab wraps with cycle:true", () => {
-  const state = makeDefaultState();
-  const items: FocusItem<TestState>[] = [
+  const items: FocusItem[] = [
     {
       id: "a",
       input: Checkbox({ checked: false, label: "A" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
     {
       id: "b",
       input: Checkbox({ checked: true, label: "B" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
   ];
 
@@ -57,24 +45,22 @@ Deno.test("focus: Shift+Tab wraps with cycle:true", () => {
   const result = handleFocusGroup(
     { items, focusedId: "a", cycle: true },
     makeKeyEvent("Tab", { shift: true }),
-    state,
   );
   assertEquals(result.focusedId, "b");
   assertEquals(result.handled, true);
 });
 
 Deno.test("focus: Shift+Tab stops at start with cycle:false", () => {
-  const state = makeDefaultState();
-  const items: FocusItem<TestState>[] = [
+  const items: FocusItem[] = [
     {
       id: "a",
       input: Checkbox({ checked: false, label: "A" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
     {
       id: "b",
       input: Checkbox({ checked: true, label: "B" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
   ];
 
@@ -82,19 +68,17 @@ Deno.test("focus: Shift+Tab stops at start with cycle:false", () => {
   const result = handleFocusGroup(
     { items, focusedId: "a", cycle: false },
     makeKeyEvent("Tab", { shift: true }),
-    state,
   );
   assertEquals(result.focusedId, "a");
   assertEquals(result.handled, true);
 });
 
 Deno.test("focus: trap swallows unhandled non-navigation keys", () => {
-  const state = makeDefaultState();
-  const items: FocusItem<TestState>[] = [
+  const items: FocusItem[] = [
     {
       id: "a",
       input: Checkbox({ checked: false, label: "A" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
   ];
 
@@ -102,94 +86,83 @@ Deno.test("focus: trap swallows unhandled non-navigation keys", () => {
   const result = handleFocusGroup(
     { items, focusedId: "a", trap: true },
     makeKeyEvent("z"),
-    state,
   );
   assertEquals(result.handled, true);
-  assertEquals(result.state, undefined);
 });
 
 Deno.test("focus: routes space to Checkbox (toggles checked)", () => {
-  const state = makeDefaultState();
-  const items: FocusItem<TestState>[] = [
+  let checked = false;
+  const items: FocusItem[] = [
     {
       id: "cb",
       input: Checkbox({ checked: false, label: "Toggle" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: (u) => {
+        checked = (u as CheckboxUpdate).checked;
+      },
     },
   ];
 
   const result = handleFocusGroup(
     { items, focusedId: "cb" },
     makeKeyEvent(" "),
-    state,
   );
   assertEquals(result.handled, true);
-  assertEquals(result.state?.checked, true);
+  assertEquals(checked, true);
 });
 
 Deno.test("focus: routes Down key to List (navigates selection)", () => {
-  const state: TestState = {
-    checked: false,
-    selected: 0,
-    name: "",
-    cursorPos: 0,
-  };
-  const items: FocusItem<TestState>[] = [
+  let selected = 0;
+  const items: FocusItem[] = [
     {
       id: "list",
       input: List({ items: ["one", "two", "three"], selected: 0 }),
-      apply: (s, u) => ({
-        ...s,
-        selected: (u as { selected: number }).selected,
-      }),
+      apply: (u) => {
+        selected = (u as ListUpdate).selected;
+      },
     },
   ];
 
   const result = handleFocusGroup(
     { items, focusedId: "list" },
     makeKeyEvent("Down"),
-    state,
   );
   assertEquals(result.handled, true);
-  assertEquals(result.state?.selected, 1);
+  assertEquals(selected, 1);
 });
 
 Deno.test("focus: unknown focusedId returns handled=false", () => {
-  const state = makeDefaultState();
-  const items: FocusItem<TestState>[] = [
+  const items: FocusItem[] = [
     {
       id: "a",
       input: Checkbox({ checked: false }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
   ];
 
   const result = handleFocusGroup(
     { items, focusedId: "nonexistent" },
     makeKeyEvent(" "),
-    state,
   );
   assertEquals(result.handled, false);
   assertEquals(result.focusedId, "nonexistent");
 });
 
 Deno.test("focus: Tab navigates through 3+ items", () => {
-  const state = makeDefaultState();
-  const items: FocusItem<TestState>[] = [
+  const items: FocusItem[] = [
     {
       id: "a",
       input: Checkbox({ checked: false, label: "A" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
     {
       id: "b",
       input: Checkbox({ checked: false, label: "B" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
     {
       id: "c",
       input: Checkbox({ checked: false, label: "C" }),
-      apply: (s, u) => ({ ...s, checked: (u as { checked: boolean }).checked }),
+      apply: () => {},
     },
   ];
 
@@ -199,7 +172,6 @@ Deno.test("focus: Tab navigates through 3+ items", () => {
   const r1 = handleFocusGroup(
     { items, focusedId: "a", cycle: true },
     tabEvent,
-    state,
   );
   assertEquals(r1.focusedId, "b");
   assertEquals(r1.handled, true);
@@ -208,7 +180,6 @@ Deno.test("focus: Tab navigates through 3+ items", () => {
   const r2 = handleFocusGroup(
     { items, focusedId: "b", cycle: true },
     tabEvent,
-    state,
   );
   assertEquals(r2.focusedId, "c");
   assertEquals(r2.handled, true);
@@ -217,7 +188,6 @@ Deno.test("focus: Tab navigates through 3+ items", () => {
   const r3 = handleFocusGroup(
     { items, focusedId: "c", cycle: true },
     tabEvent,
-    state,
   );
   assertEquals(r3.focusedId, "a");
   assertEquals(r3.handled, true);

@@ -1,19 +1,18 @@
 // Quick emoji and animation test
 import { Box, colors, Column, run, Text } from "../mod.ts";
 
-interface State {
-  frame: number;
-}
-
 const emojis = ["🎉", "🚀", "⭐", "🔥", "💯", "✨", "🎯", "🌟"];
 
-await run<State>({
-  initialState: { frame: 0 },
+let frame = 0;
+
+await run({
   tickInterval: 100,
 
-  onTick: (state) => ({ frame: state.frame + 1 }),
+  onTick: () => {
+    frame++;
+  },
 
-  render: (state) =>
+  render: () =>
     Box({
       border: "rounded",
       borderColor: colors.fg.cyan,
@@ -28,8 +27,8 @@ await run<State>({
         {
           component: Text({
             content: `Animated: ${
-              emojis[state.frame % emojis.length]
-            } (frame ${state.frame})`,
+              emojis[frame % emojis.length]
+            } (frame ${frame})`,
             style: { fg: colors.fg.yellow },
           }),
         },
@@ -43,8 +42,7 @@ await run<State>({
       ]),
     }),
 
-  onKey: (event, _state, ctx) => {
+  onKey: (event, ctx) => {
     if (event.key === "q") ctx.exit();
-    return undefined;
   },
 });

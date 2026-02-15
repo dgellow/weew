@@ -1,4 +1,4 @@
-/** App — the main application runner with state management, rendering loop, and keyboard input. */
+/** App — the main application runner with terminal lifecycle, rendering loop, and keyboard input. */
 
 import { Canvas } from "./canvas.ts";
 import type { Component, Rect } from "./components.ts";
@@ -17,36 +17,22 @@ import {
 } from "./terminal.ts";
 import { cursor } from "./ansi.ts";
 
-/** Configuration for creating an App. Generic over state type S. */
-export interface AppConfig<S> {
-  /** Initial state */
-  initialState: S;
-  /** Render function - returns the UI based on current state */
-  render: (state: S, ctx: RenderContext) => Component;
-  /** Key handler - return new state or undefined to keep current */
-  onKey?: (
-    event: KeyEvent,
-    state: S,
-    ctx: AppContext<S>,
-  ) => S | undefined | void;
-  /** Tick handler for animations - return new state */
-  onTick?: (
-    state: S,
-    delta: number,
-    ctx: AppContext<S>,
-  ) => S | undefined | void;
-  /** Tick interval in ms (default: 16 ~60fps) */
+/** Configuration for creating an App. User owns state via closures. */
+export interface AppConfig {
+  /** Return the current UI. Called after every event and on explicit render request. */
+  render: (ctx: RenderContext) => Component;
+  /** Key handler — mutate your own state, call ctx.render() for async updates. */
+  onKey?: (event: KeyEvent, ctx: AppContext) => void;
+  /** Tick handler for animations. Starts a tick loop at tickInterval. Without this, no tick loop runs. */
+  onTick?: (delta: number, ctx: AppContext) => void;
+  /** Tick interval in ms (default: 16 ~60fps). Only used when onTick is provided. */
   tickInterval?: number;
   /** Use alternate screen buffer (default: true) */
   altScreen?: boolean;
   /** Hide cursor (default: true) */
   hideCursor?: boolean;
   /** Handle resize */
-  onResize?: (
-    size: TerminalSize,
-    state: S,
-    ctx: AppContext<S>,
-  ) => S | undefined | void;
+  onResize?: (size: TerminalSize) => void;
 }
 
 /** Context passed to the render function with current terminal dimensions. */
@@ -55,12 +41,10 @@ export interface RenderContext {
   height: number;
 }
 
-/** Context available to event handlers for controlling app state and lifecycle. */
-export interface AppContext<S> {
-  /** Request a re-render */
+/** Context available to event handlers for controlling app lifecycle. */
+export interface AppContext {
+  /** Trigger a re-render. Use this for async updates (fetch, timers). Sync handlers auto-render. */
   render: () => void;
-  /** Update state and re-render */
-  setState: (newState: S | ((s: S) => S)) => void;
   /** Exit the app */
   exit: () => void;
   /** Get current terminal size */
@@ -69,48 +53,40 @@ export interface AppContext<S> {
 
 /**
  * Main application class. Manages the terminal lifecycle (alt screen, raw mode, cursor),
- * runs a tick loop for animations, and reads keyboard input.
+ * reads keyboard input, and optionally runs a tick loop for animations.
  */
-export class App<S> {
-  private state: S;
+export class App {
   private canvas: Canvas;
   private keyboard: KeyboardInput;
   private running = false;
   private needsRender = true;
-  private config: Required<AppConfig<S>>;
+  private config: Required<AppConfig>;
+  private hasOnTick: boolean;
   private lastTick = 0;
   private tickTimer: number | null = null;
   private removeResizeHandler: (() => void) | null = null;
 
-  constructor(config: AppConfig<S>) {
+  constructor(config: AppConfig) {
+    this.hasOnTick = config.onTick !== undefined;
     this.config = {
-      initialState: config.initialState,
       render: config.render,
-      onKey: config.onKey ?? (() => undefined),
-      onTick: config.onTick ?? (() => undefined),
+      onKey: config.onKey ?? (() => {}),
+      onTick: config.onTick ?? (() => {}),
       tickInterval: config.tickInterval ?? 16,
       altScreen: config.altScreen ?? true,
       hideCursor: config.hideCursor ?? true,
-      onResize: config.onResize ?? (() => undefined),
+      onResize: config.onResize ?? (() => {}),
     };
 
-    this.state = this.config.initialState;
     const size = getSize();
     this.canvas = new Canvas(size.columns, size.rows);
     this.keyboard = new KeyboardInput();
   }
 
-  private readonly ctx: AppContext<S> = {
+  private readonly ctx: AppContext = {
     render: () => {
       this.needsRender = true;
-    },
-    setState: (newState) => {
-      if (typeof newState === "function") {
-        this.state = (newState as (s: S) => S)(this.state);
-      } else {
-        this.state = newState;
-      }
-      this.needsRender = true;
+      this.renderFrame();
     },
     exit: () => {
       this.stop();
@@ -131,7 +107,7 @@ export class App<S> {
 
     this.canvas.clear();
 
-    const root = this.config.render(this.state, {
+    const root = this.config.render({
       width: this.canvas.width,
       height: this.canvas.height,
     });
@@ -157,11 +133,9 @@ export class App<S> {
 
   private handleKey = (event: KeyEvent): void => {
     try {
-      const newState = this.config.onKey(event, this.state, this.ctx);
-      if (newState !== undefined) {
-        this.state = newState;
-        this.needsRender = true;
-      }
+      this.config.onKey(event, this.ctx);
+      this.needsRender = true;
+      this.renderFrame();
     } catch (e) {
       this.safeCleanup();
       throw e;
@@ -176,12 +150,8 @@ export class App<S> {
       const delta = now - this.lastTick;
       this.lastTick = now;
 
-      const newState = this.config.onTick(this.state, delta, this.ctx);
-      if (newState !== undefined) {
-        this.state = newState;
-        this.needsRender = true;
-      }
-
+      this.config.onTick(delta, this.ctx);
+      this.needsRender = true;
       this.renderFrame();
     } catch (e) {
       this.safeCleanup();
@@ -198,10 +168,7 @@ export class App<S> {
       const size = getSize();
       this.canvas.resize(size.columns, size.rows);
 
-      const newState = this.config.onResize(size, this.state, this.ctx);
-      if (newState !== undefined) {
-        this.state = newState;
-      }
+      this.config.onResize(size);
 
       this.needsRender = true;
       this.renderFrame();
@@ -230,9 +197,11 @@ export class App<S> {
     // Setup keyboard handler
     this.keyboard.onKey(this.handleKey);
 
-    // Start tick loop
-    this.lastTick = performance.now();
-    this.handleTick();
+    // Start tick loop only if onTick was provided
+    if (this.hasOnTick) {
+      this.lastTick = performance.now();
+      this.handleTick();
+    }
 
     // Initial render
     this.renderFrame();
@@ -277,7 +246,7 @@ export class App<S> {
 }
 
 /** Create and run an App with the given config. Convenience wrapper around `new App(config).run()`. */
-export function run<S>(config: AppConfig<S>): Promise<void> {
+export function run(config: AppConfig): Promise<void> {
   const app = new App(config);
   return app.run();
 }

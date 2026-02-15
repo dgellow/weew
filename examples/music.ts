@@ -118,41 +118,25 @@ function updateSpec(prev: number[], playing: boolean): number[] {
 
 // ── State ─────────────────────────────────────────────
 
-interface State {
-  panel: "library" | "tracks";
-  albumIndex: number;
-  trackIndex: number;
-  trackScroll: number;
-  playing: boolean;
-  currentAlbum: number;
-  currentTrack: number;
-  elapsed: number;
-  frame: number;
-  spec: number[];
-  loading: number;
-}
-
 const SPEC_WIDTH = 20;
 
-await run<State>({
-  initialState: {
-    panel: "library",
-    albumIndex: 0,
-    trackIndex: 0,
-    trackScroll: 0,
-    playing: false,
-    currentAlbum: 0,
-    currentTrack: 0,
-    elapsed: 0,
-    frame: 0,
-    spec: Array.from({ length: SPEC_WIDTH }, () => 0),
-    loading: 0,
-  },
+let panel: "library" | "tracks" = "library";
+let albumIndex = 0;
+let trackIndex = 0;
+let trackScroll = 0;
+let playing = false;
+let currentAlbum = 0;
+let currentTrack = 0;
+let elapsed = 0;
+let frame = 0;
+let spec = Array.from({ length: SPEC_WIDTH }, () => 0);
+let loading = 0;
 
-  render: (state) => {
-    const album = ALBUMS[state.currentAlbum];
-    const track = album.tracks[state.currentTrack];
-    const viewAlbum = ALBUMS[state.albumIndex];
+await run({
+  render: () => {
+    const album = ALBUMS[currentAlbum];
+    const track = album.tracks[currentTrack];
+    const viewAlbum = ALBUMS[albumIndex];
     const viewTracks = viewAlbum.tracks;
 
     // ── Title bar ──
@@ -166,7 +150,7 @@ await run<State>({
         flex: 1,
       },
       {
-        component: state.playing
+        component: playing
           ? Badge({
             text: " PLAYING",
             style: { fg: colors.fg.black, bg: colors.bg.green },
@@ -175,7 +159,7 @@ await run<State>({
             text: " PAUSED",
             style: { fg: colors.fg.white, bg: colors.bg.gray },
           }),
-        width: state.playing ? 12 : 11,
+        width: playing ? 12 : 11,
       },
     ]);
 
@@ -188,8 +172,8 @@ await run<State>({
           component: Text({
             content: a.title,
             style: {
-              fg: i === state.currentAlbum ? colors.fg.green : colors.fg.white,
-              bold: i === state.currentAlbum,
+              fg: i === currentAlbum ? colors.fg.green : colors.fg.white,
+              bold: i === currentAlbum,
             },
           }),
           height: 1,
@@ -206,14 +190,14 @@ await run<State>({
 
     const sidebar = Box({
       border: "single",
-      borderColor: state.panel === "library" ? colors.fg.cyan : colors.fg.gray,
+      borderColor: panel === "library" ? colors.fg.cyan : colors.fg.gray,
       title: " Library ",
       padding: { left: 1, right: 1, top: 0, bottom: 0 },
       child: FocusContainer({
         items: sidebarItems,
-        focusedId: String(state.albumIndex),
+        focusedId: String(albumIndex),
         focusedStyle: {
-          fg: state.panel === "library" ? colors.fg.cyan : colors.fg.gray,
+          fg: panel === "library" ? colors.fg.cyan : colors.fg.gray,
         },
         itemHeight: 2,
         gap: 1,
@@ -246,7 +230,7 @@ await run<State>({
           component: Row([
             {
               component: Progress({
-                value: (state.elapsed / track.duration) * 100,
+                value: (elapsed / track.duration) * 100,
                 filledColor: colors.fg.green,
                 emptyColor: colors.fg.gray,
               }),
@@ -254,7 +238,7 @@ await run<State>({
             },
             {
               component: Text({
-                content: ` ${fmt(state.elapsed)} / ${fmt(track.duration)}`,
+                content: ` ${fmt(elapsed)} / ${fmt(track.duration)}`,
                 style: { fg: colors.fg.gray },
               }),
               width: 13,
@@ -264,7 +248,7 @@ await run<State>({
         },
         {
           component: Text({
-            content: specStr(state.spec),
+            content: specStr(spec),
             style: { fg: colors.fg.cyan },
           }),
           height: 1,
@@ -282,17 +266,17 @@ await run<State>({
     // ── Track list ──
 
     const trackRows = viewTracks.map((t, i) => {
-      const isPlaying = state.currentAlbum === state.albumIndex &&
-        state.currentTrack === i;
-      const isSelected = state.panel === "tracks" && state.trackIndex === i;
+      const isPlaying = currentAlbum === albumIndex &&
+        currentTrack === i;
+      const isSelected = panel === "tracks" && trackIndex === i;
       const marker = isPlaying ? "  " : isSelected ? "  " : String(i + 1);
       return [marker, t.title, viewAlbum.artist, fmt(t.duration)];
     });
 
-    const trackContent = state.loading > 0
+    const trackContent = loading > 0
       ? Row([{
         component: Spinner({
-          frame: state.frame,
+          frame,
           label: "Loading album...",
           color: colors.fg.cyan,
         }),
@@ -306,10 +290,10 @@ await run<State>({
       });
 
     const trackList = ScrollBox({
-      scrollY: state.trackScroll,
-      contentHeight: state.loading > 0 ? 1 : viewTracks.length + 2,
+      scrollY: trackScroll,
+      contentHeight: loading > 0 ? 1 : viewTracks.length + 2,
       border: "single",
-      borderColor: state.panel === "tracks" ? colors.fg.cyan : colors.fg.gray,
+      borderColor: panel === "tracks" ? colors.fg.cyan : colors.fg.gray,
       title: ` ${viewAlbum.title} `,
       showScrollbar: true,
       child: trackContent,
@@ -357,7 +341,7 @@ await run<State>({
     });
   },
 
-  onKey: (event, state, ctx) => {
+  onKey: (event, ctx) => {
     if (isKey(event, "q") || isKey(event, "c", { ctrl: true })) {
       ctx.exit();
       return;
@@ -365,100 +349,77 @@ await run<State>({
 
     // Panel switching
     if (event.key === Keys.Left || event.key === Keys.Right) {
-      return {
-        ...state,
-        panel: state.panel === "library" ? "tracks" : "library",
-      };
+      panel = panel === "library" ? "tracks" : "library";
+      return;
     }
 
     // Navigate
     if (event.key === Keys.Up) {
-      if (state.panel === "library") {
-        return {
-          ...state,
-          albumIndex: Math.max(0, state.albumIndex - 1),
-        };
+      if (panel === "library") {
+        albumIndex = Math.max(0, albumIndex - 1);
+      } else {
+        trackIndex = Math.max(0, trackIndex - 1);
+        trackScroll = Math.min(trackScroll, trackIndex);
       }
-      const idx = Math.max(0, state.trackIndex - 1);
-      return {
-        ...state,
-        trackIndex: idx,
-        trackScroll: Math.min(state.trackScroll, idx),
-      };
+      return;
     }
 
     if (event.key === Keys.Down) {
-      if (state.panel === "library") {
-        return {
-          ...state,
-          albumIndex: Math.min(ALBUMS.length - 1, state.albumIndex + 1),
-        };
+      if (panel === "library") {
+        albumIndex = Math.min(ALBUMS.length - 1, albumIndex + 1);
+      } else {
+        const len = ALBUMS[albumIndex].tracks.length;
+        trackIndex = Math.min(len - 1, trackIndex + 1);
+        trackScroll = Math.max(trackScroll, trackIndex - 4);
       }
-      const len = ALBUMS[state.albumIndex].tracks.length;
-      const idx = Math.min(len - 1, state.trackIndex + 1);
-      return {
-        ...state,
-        trackIndex: idx,
-        trackScroll: Math.max(state.trackScroll, idx - 4),
-      };
+      return;
     }
 
     // Select (Enter = Ctrl+M in raw mode)
     if (isKey(event, "m", { ctrl: true })) {
-      if (state.panel === "library") {
-        return {
-          ...state,
-          currentAlbum: state.albumIndex,
-          currentTrack: 0,
-          trackIndex: 0,
-          trackScroll: 0,
-          elapsed: 0,
-          playing: true,
-          loading: 6,
-        };
+      if (panel === "library") {
+        currentAlbum = albumIndex;
+        currentTrack = 0;
+        trackIndex = 0;
+        trackScroll = 0;
+        elapsed = 0;
+        playing = true;
+        loading = 6;
+      } else {
+        currentAlbum = albumIndex;
+        currentTrack = trackIndex;
+        elapsed = 0;
+        playing = true;
       }
-      return {
-        ...state,
-        currentAlbum: state.albumIndex,
-        currentTrack: state.trackIndex,
-        elapsed: 0,
-        playing: true,
-      };
+      return;
     }
 
     // Play / pause
     if (event.key === " ") {
-      return { ...state, playing: !state.playing };
+      playing = !playing;
+      return;
     }
 
     // Next / prev track
     if (isKey(event, "n")) {
-      const len = ALBUMS[state.currentAlbum].tracks.length;
-      return {
-        ...state,
-        currentTrack: (state.currentTrack + 1) % len,
-        elapsed: 0,
-      };
+      const len = ALBUMS[currentAlbum].tracks.length;
+      currentTrack = (currentTrack + 1) % len;
+      elapsed = 0;
+      return;
     }
     if (isKey(event, "p")) {
-      const len = ALBUMS[state.currentAlbum].tracks.length;
-      return {
-        ...state,
-        currentTrack: (state.currentTrack - 1 + len) % len,
-        elapsed: 0,
-      };
+      const len = ALBUMS[currentAlbum].tracks.length;
+      currentTrack = (currentTrack - 1 + len) % len;
+      elapsed = 0;
+      return;
     }
-
-    return undefined;
   },
 
-  onTick: (state, delta) => {
-    const album = ALBUMS[state.currentAlbum];
-    const track = album.tracks[state.currentTrack];
-    let elapsed = state.elapsed;
-    let currentTrack = state.currentTrack;
+  onTick: (delta) => {
+    const album = ALBUMS[currentAlbum];
+    const track = album.tracks[currentTrack];
 
-    if (state.playing && state.loading === 0) {
+    if (playing && loading === 0) {
       elapsed += delta / 1000;
       if (elapsed >= track.duration) {
         currentTrack = (currentTrack + 1) % album.tracks.length;
@@ -466,14 +427,9 @@ await run<State>({
       }
     }
 
-    return {
-      ...state,
-      frame: state.frame + 1,
-      elapsed,
-      currentTrack,
-      spec: updateSpec(state.spec, state.playing && state.loading === 0),
-      loading: Math.max(0, state.loading - 1),
-    };
+    frame++;
+    spec = updateSpec(spec, playing && loading === 0);
+    loading = Math.max(0, loading - 1);
   },
 
   tickInterval: 80,

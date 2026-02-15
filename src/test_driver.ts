@@ -8,31 +8,28 @@ import type { TerminalSize } from "./terminal.ts";
 
 /**
  * Headless driver for testing weew apps without a real terminal.
- * Runs the same state machine as App but without terminal I/O.
+ * Accepts the same AppConfig as App but runs without terminal I/O.
  */
-export class TestDriver<S> {
-  private _state: S;
+export class TestDriver {
   private _canvas: Canvas;
   private _running = true;
   private _needsRender = true;
   private _width: number;
   private _height: number;
-  private config: Required<AppConfig<S>>;
-  private readonly ctx: AppContext<S>;
+  private config: Required<AppConfig>;
+  private readonly ctx: AppContext;
 
-  constructor(config: AppConfig<S>, width = 80, height = 24) {
+  constructor(config: AppConfig, width = 80, height = 24) {
     this.config = {
-      initialState: config.initialState,
       render: config.render,
-      onKey: config.onKey ?? (() => undefined),
-      onTick: config.onTick ?? (() => undefined),
+      onKey: config.onKey ?? (() => {}),
+      onTick: config.onTick ?? (() => {}),
       tickInterval: config.tickInterval ?? 16,
       altScreen: config.altScreen ?? true,
       hideCursor: config.hideCursor ?? true,
-      onResize: config.onResize ?? (() => undefined),
+      onResize: config.onResize ?? (() => {}),
     };
 
-    this._state = this.config.initialState;
     this._width = width;
     this._height = height;
     this._canvas = new Canvas(width, height);
@@ -40,14 +37,7 @@ export class TestDriver<S> {
     this.ctx = {
       render: () => {
         this._needsRender = true;
-      },
-      setState: (newState: S | ((s: S) => S)) => {
-        if (typeof newState === "function") {
-          this._state = (newState as (s: S) => S)(this._state);
-        } else {
-          this._state = newState;
-        }
-        this._needsRender = true;
+        this.renderFrame();
       },
       exit: () => {
         this._running = false;
@@ -57,11 +47,6 @@ export class TestDriver<S> {
 
     // Initial render
     this.renderFrame();
-  }
-
-  /** Current app state */
-  get state(): S {
-    return this._state;
   }
 
   /** Current canvas */
@@ -97,21 +82,15 @@ export class TestDriver<S> {
 
   /** Send a raw KeyEvent */
   sendKeyEvent(event: KeyEvent): void {
-    const newState = this.config.onKey(event, this._state, this.ctx);
-    if (newState !== undefined) {
-      this._state = newState;
-      this._needsRender = true;
-    }
+    this.config.onKey(event, this.ctx);
+    this._needsRender = true;
     this.renderFrame();
   }
 
   /** Advance time (triggers onTick) */
   tick(deltaMs = 16): void {
-    const newState = this.config.onTick(this._state, deltaMs, this.ctx);
-    if (newState !== undefined) {
-      this._state = newState;
-      this._needsRender = true;
-    }
+    this.config.onTick(deltaMs, this.ctx);
+    this._needsRender = true;
     this.renderFrame();
   }
 
@@ -122,10 +101,7 @@ export class TestDriver<S> {
     this._canvas.resize(width, height);
 
     const size: TerminalSize = { columns: width, rows: height };
-    const newState = this.config.onResize(size, this._state, this.ctx);
-    if (newState !== undefined) {
-      this._state = newState;
-    }
+    this.config.onResize(size);
     this._needsRender = true;
     this.renderFrame();
   }
@@ -134,6 +110,13 @@ export class TestDriver<S> {
   sendKeys(...keys: string[]): void {
     for (const k of keys) {
       this.sendKey(k);
+    }
+  }
+
+  /** Send each character of a string as individual key events */
+  type(text: string): void {
+    for (const ch of text) {
+      this.sendKey(ch);
     }
   }
 
@@ -149,6 +132,11 @@ export class TestDriver<S> {
     return this.text;
   }
 
+  /** Stop the app */
+  exit(): void {
+    this._running = false;
+  }
+
   private renderFrame(): void {
     if (!this._needsRender) return;
     this._needsRender = false;
@@ -160,7 +148,7 @@ export class TestDriver<S> {
       height: this._height,
     };
 
-    const root: Component = this.config.render(this._state, renderCtx);
+    const root: Component = this.config.render(renderCtx);
     const rect: Rect = {
       x: 0,
       y: 0,
