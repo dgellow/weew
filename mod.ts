@@ -10,6 +10,7 @@ export {
   cursor,
   ESC,
   fg,
+  osc,
   screen,
   stripAnsi,
   style,
@@ -20,12 +21,14 @@ export type {
   ClearCommands,
   ColorCommands,
   CursorCommands,
+  OscCommands,
   ScreenCommands,
   StyleCommands,
 } from "./src/ansi.ts";
 
 // Terminal utilities
 export {
+  bell,
   clearLine,
   clearScreen,
   enterAltScreen,
@@ -34,8 +37,11 @@ export {
   hideCursor,
   isTTY,
   moveTo,
+  noColor,
   onResize,
+  prefersReducedMotion,
   setRawMode,
+  setTitle,
   showCursor,
   write,
   writeLine,
@@ -52,37 +58,75 @@ export {
   borders,
   Box,
   buildStyle,
+  Checkbox,
   colors,
+  Dialog,
   Divider,
   FocusContainer,
   List,
   Progress,
+  scrollbarPosition,
   ScrollBox,
+  Select,
   Spinner,
   Table,
+  Tabs,
   Text,
   TextInput,
+  Toast,
+  Tree,
+  VirtualList,
+  VirtualScrollBox,
 } from "./src/components.ts";
 export type {
   BadgeProps,
   BorderStyle,
   BoxProps,
+  CheckboxProps,
+  CheckboxUpdate,
   ColorHelpers,
   Colors,
   Component,
+  DialogProps,
   DividerProps,
   FocusableItem,
   FocusContainerProps,
+  InputComponent,
+  KeyHandler,
+  KeyResult,
   ListProps,
+  ListUpdate,
   ProgressProps,
   Rect,
+  ScrollbarInfo,
   ScrollBoxProps,
+  SelectProps,
+  SelectUpdate,
   SpinnerProps,
   Style,
+  Tab,
   TableProps,
+  TabsProps,
+  TabsUpdate,
   TextInputProps,
+  TextInputUpdate,
   TextProps,
+  ToastProps,
+  TreeNode,
+  TreeProps,
+  TreeUpdate,
+  VirtualListProps,
+  VirtualScrollBoxProps,
+  VisibleRange,
 } from "./src/components.ts";
+
+// Focus management
+export { handleFocusGroup } from "./src/focus.ts";
+export type {
+  FocusGroupConfig,
+  FocusGroupResult,
+  FocusItem,
+} from "./src/focus.ts";
 
 // Layout
 export {
@@ -123,3 +167,11 @@ export type { KeyEvent } from "./src/input.ts";
 // App runner
 export { App, renderOnce, run } from "./src/app.ts";
 export type { AppConfig, AppContext, RenderContext } from "./src/app.ts";
+
+// Testing
+export { TestDriver } from "./src/test_driver.ts";
+export {
+  assertCellAt,
+  assertRegion,
+  assertTextAt,
+} from "./src/test_helpers.ts";

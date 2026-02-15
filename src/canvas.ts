@@ -1,4 +1,5 @@
 // Canvas - a 2D buffer for efficient terminal rendering
+// Uses flat parallel arrays for cache-friendly access and minimal GC pressure.
 
 import { charWidth, cursor, stripAnsi, style } from "./ansi.ts";
 import { getSize, write } from "./terminal.ts";
@@ -18,11 +19,38 @@ export interface Cell {
 }
 
 export class Canvas {
-  private bufferA: Cell[][];
-  private bufferB: Cell[][];
-  private buffer: Cell[][];
-  private prevBuffer: Cell[][] | null = null;
+  // Flat parallel arrays — index = y * width + x
+  private charsA: string[];
+  private fgsA: (string | undefined)[];
+  private bgsA: (string | undefined)[];
+  private stylesA: (string | undefined)[];
+
+  private charsB: string[];
+  private fgsB: (string | undefined)[];
+  private bgsB: (string | undefined)[];
+  private stylesB: (string | undefined)[];
+
+  // Active buffer references
+  private chars: string[];
+  private fgs: (string | undefined)[];
+  private bgs: (string | undefined)[];
+  private stys: (string | undefined)[];
+
+  // Previous buffer for diffing
+  private prevChars: string[] | null = null;
+  private prevFgs: (string | undefined)[] | null = null;
+  private prevBgs: (string | undefined)[] | null = null;
+  private prevStys: (string | undefined)[] | null = null;
+
   private clipStack: ClipRect[] = [];
+
+  // Dirty region tracking
+  private dirtyMinX = 0;
+  private dirtyMinY = 0;
+  private dirtyMaxX = 0;
+  private dirtyMaxY = 0;
+  private hasDirty = false;
+
   width: number;
   height: number;
 
@@ -30,39 +58,60 @@ export class Canvas {
     const size = getSize();
     this.width = width ?? size.columns;
     this.height = height ?? size.rows;
-    this.bufferA = this.createBuffer();
-    this.bufferB = this.createBuffer();
-    this.buffer = this.bufferA;
-  }
+    const len = this.width * this.height;
 
-  private createBuffer(): Cell[][] {
-    return Array.from(
-      { length: this.height },
-      () => Array.from({ length: this.width }, () => ({ char: " " })),
-    );
+    this.charsA = new Array<string>(len).fill(" ");
+    this.fgsA = new Array<string | undefined>(len).fill(undefined);
+    this.bgsA = new Array<string | undefined>(len).fill(undefined);
+    this.stylesA = new Array<string | undefined>(len).fill(undefined);
+
+    this.charsB = new Array<string>(len).fill(" ");
+    this.fgsB = new Array<string | undefined>(len).fill(undefined);
+    this.bgsB = new Array<string | undefined>(len).fill(undefined);
+    this.stylesB = new Array<string | undefined>(len).fill(undefined);
+
+    this.chars = this.charsA;
+    this.fgs = this.fgsA;
+    this.bgs = this.bgsA;
+    this.stys = this.stylesA;
   }
 
   /** Clear the buffer in-place */
   clear(): void {
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
-        const cell = this.buffer[y][x];
-        cell.char = " ";
-        cell.fg = undefined;
-        cell.bg = undefined;
-        cell.style = undefined;
-      }
-    }
+    this.chars.fill(" ");
+    this.fgs.fill(undefined);
+    this.bgs.fill(undefined);
+    this.stys.fill(undefined);
+    this.markFullDirty();
   }
 
   /** Resize the canvas and clear buffers */
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    this.bufferA = this.createBuffer();
-    this.bufferB = this.createBuffer();
-    this.buffer = this.bufferA;
-    this.prevBuffer = null;
+    const len = width * height;
+
+    this.charsA = new Array<string>(len).fill(" ");
+    this.fgsA = new Array<string | undefined>(len).fill(undefined);
+    this.bgsA = new Array<string | undefined>(len).fill(undefined);
+    this.stylesA = new Array<string | undefined>(len).fill(undefined);
+
+    this.charsB = new Array<string>(len).fill(" ");
+    this.fgsB = new Array<string | undefined>(len).fill(undefined);
+    this.bgsB = new Array<string | undefined>(len).fill(undefined);
+    this.stylesB = new Array<string | undefined>(len).fill(undefined);
+
+    this.chars = this.charsA;
+    this.fgs = this.fgsA;
+    this.bgs = this.bgsA;
+    this.stys = this.stylesA;
+
+    this.prevChars = null;
+    this.prevFgs = null;
+    this.prevBgs = null;
+    this.prevStys = null;
+
+    this.markFullDirty();
   }
 
   /** Push a clip region onto the stack */
@@ -79,6 +128,7 @@ export class Canvas {
   set(x: number, y: number, cell: Cell): void {
     const xi = Math.floor(x);
     const yi = Math.floor(y);
+
     if (this.clipStack.length > 0) {
       const clip = this.clipStack[this.clipStack.length - 1];
       if (
@@ -86,8 +136,14 @@ export class Canvas {
         yi < clip.y || yi >= clip.y + clip.height
       ) return;
     }
+
     if (xi >= 0 && xi < this.width && yi >= 0 && yi < this.height) {
-      this.buffer[yi][xi] = cell;
+      const idx = yi * this.width + xi;
+      this.chars[idx] = cell.char;
+      this.fgs[idx] = cell.fg;
+      this.bgs[idx] = cell.bg;
+      this.stys[idx] = cell.style;
+      this.markDirty(xi, yi);
     }
   }
 
@@ -96,7 +152,13 @@ export class Canvas {
     const xi = Math.floor(x);
     const yi = Math.floor(y);
     if (xi >= 0 && xi < this.width && yi >= 0 && yi < this.height) {
-      return this.buffer[yi][xi];
+      const idx = yi * this.width + xi;
+      return {
+        char: this.chars[idx],
+        fg: this.fgs[idx],
+        bg: this.bgs[idx],
+        style: this.stys[idx],
+      };
     }
     return undefined;
   }
@@ -108,13 +170,28 @@ export class Canvas {
     text: string,
     options?: { fg?: string; bg?: string; style?: string },
   ): void {
-    const stripped = stripAnsi(text);
     const xi = Math.floor(x);
     const yi = Math.floor(y);
+
+    // Fast path: pure ASCII, no ANSI codes
+    if (this.isAsciiClean(text)) {
+      for (let i = 0; i < text.length; i++) {
+        this.set(xi + i, yi, {
+          char: text[i],
+          fg: options?.fg,
+          bg: options?.bg,
+          style: options?.style,
+        });
+      }
+      return;
+    }
+
+    // Slow path: strip ANSI, handle wide chars
+    const stripped = stripAnsi(text);
     let col = 0;
     for (const char of stripped) {
       const width = charWidth(char);
-      if (width === 0) continue; // Skip zero-width characters
+      if (width === 0) continue;
 
       this.set(xi + col, yi, {
         char: char,
@@ -126,7 +203,7 @@ export class Canvas {
       // For wide characters, fill the next cell with empty placeholder
       if (width === 2) {
         this.set(xi + col + 1, yi, {
-          char: "", // Empty - cursor will skip this
+          char: "",
           fg: options?.fg,
           bg: options?.bg,
         });
@@ -196,21 +273,30 @@ export class Canvas {
       curFg: string | undefined,
       curBg: string | undefined;
 
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
-        const cell = this.buffer[y][x];
-        const prev = this.prevBuffer?.[y]?.[x];
+    // Use dirty region bounds if available, otherwise full screen
+    const minY = this.hasDirty ? this.dirtyMinY : 0;
+    const maxY = this.hasDirty ? this.dirtyMaxY : this.height - 1;
+    const minX = this.hasDirty ? this.dirtyMinX : 0;
+    const maxX = this.hasDirty ? this.dirtyMaxX : this.width - 1;
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const idx = y * this.width + x;
+        const ch = this.chars[idx];
+        const cfgs = this.fgs[idx];
+        const cbgs = this.bgs[idx];
+        const csty = this.stys[idx];
 
         // Skip empty placeholder cells (second half of wide characters)
-        if (cell.char === "") continue;
+        if (ch === "") continue;
 
         // Skip if cell hasn't changed
         if (
-          prev &&
-          prev.char === cell.char &&
-          prev.fg === cell.fg &&
-          prev.bg === cell.bg &&
-          prev.style === cell.style
+          this.prevChars !== null &&
+          this.prevChars[idx] === ch &&
+          this.prevFgs![idx] === cfgs &&
+          this.prevBgs![idx] === cbgs &&
+          this.prevStys![idx] === csty
         ) {
           continue;
         }
@@ -223,20 +309,18 @@ export class Canvas {
         }
 
         // Only emit style codes when they change
-        if (
-          cell.style !== curStyle || cell.fg !== curFg || cell.bg !== curBg
-        ) {
+        if (csty !== curStyle || cfgs !== curFg || cbgs !== curBg) {
           parts.push(style.reset);
-          if (cell.style) parts.push(cell.style);
-          if (cell.fg) parts.push(cell.fg);
-          if (cell.bg) parts.push(cell.bg);
-          curStyle = cell.style;
-          curFg = cell.fg;
-          curBg = cell.bg;
+          if (csty) parts.push(csty);
+          if (cfgs) parts.push(cfgs);
+          if (cbgs) parts.push(cbgs);
+          curStyle = csty;
+          curFg = cfgs;
+          curBg = cbgs;
         }
 
-        parts.push(cell.char);
-        penX = x + (charWidth(cell.char) > 1 ? 2 : 1);
+        parts.push(ch);
+        penX = x + (charWidth(ch) > 1 ? 2 : 1);
         penY = y;
       }
     }
@@ -247,13 +331,143 @@ export class Canvas {
     }
 
     // Swap buffers
-    this.prevBuffer = this.buffer;
-    this.buffer = this.buffer === this.bufferA ? this.bufferB : this.bufferA;
+    this.prevChars = this.chars;
+    this.prevFgs = this.fgs;
+    this.prevBgs = this.bgs;
+    this.prevStys = this.stys;
+
+    if (this.chars === this.charsA) {
+      this.chars = this.charsB;
+      this.fgs = this.fgsB;
+      this.bgs = this.bgsB;
+      this.stys = this.stylesB;
+    } else {
+      this.chars = this.charsA;
+      this.fgs = this.fgsA;
+      this.bgs = this.bgsA;
+      this.stys = this.stylesA;
+    }
+
+    this.resetDirty();
   }
 
   /** Force full redraw (ignores diff) */
   fullRender(): void {
-    this.prevBuffer = null;
+    this.prevChars = null;
+    this.prevFgs = null;
+    this.prevBgs = null;
+    this.prevStys = null;
+    this.markFullDirty();
     this.render();
+  }
+
+  /** Get plain text representation of the canvas (no styles) */
+  toString(): string {
+    const lines: string[] = [];
+    for (let y = 0; y < this.height; y++) {
+      let line = "";
+      for (let x = 0; x < this.width; x++) {
+        const ch = this.chars[y * this.width + x];
+        if (ch === "") continue; // skip wide char placeholder
+        line += ch;
+      }
+      lines.push(line);
+    }
+    return lines.join("\n");
+  }
+
+  /** Get text with ANSI escape codes */
+  toAnsi(): string {
+    const lines: string[] = [];
+    for (let y = 0; y < this.height; y++) {
+      const parts: string[] = [];
+      let curStyle: string | undefined,
+        curFg: string | undefined,
+        curBg: string | undefined;
+
+      for (let x = 0; x < this.width; x++) {
+        const idx = y * this.width + x;
+        const ch = this.chars[idx];
+        if (ch === "") continue;
+
+        const cfgs = this.fgs[idx];
+        const cbgs = this.bgs[idx];
+        const csty = this.stys[idx];
+
+        if (csty !== curStyle || cfgs !== curFg || cbgs !== curBg) {
+          parts.push(style.reset);
+          if (csty) parts.push(csty);
+          if (cfgs) parts.push(cfgs);
+          if (cbgs) parts.push(cbgs);
+          curStyle = csty;
+          curFg = cfgs;
+          curBg = cbgs;
+        }
+
+        parts.push(ch);
+      }
+
+      if (curStyle || curFg || curBg) {
+        parts.push(style.reset);
+      }
+      lines.push(parts.join(""));
+    }
+    return lines.join("\n");
+  }
+
+  /** Get a sub-region as plain text */
+  regionToString(rx: number, ry: number, rw: number, rh: number): string {
+    const lines: string[] = [];
+    for (let y = ry; y < ry + rh && y < this.height; y++) {
+      let line = "";
+      for (let x = rx; x < rx + rw && x < this.width; x++) {
+        const ch = this.chars[y * this.width + x];
+        if (ch === "") continue;
+        line += ch;
+      }
+      lines.push(line);
+    }
+    return lines.join("\n");
+  }
+
+  // -- Private helpers --
+
+  private isAsciiClean(s: string): boolean {
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c < 0x20 || c > 0x7e) return false;
+    }
+    return true;
+  }
+
+  private markDirty(x: number, y: number): void {
+    if (!this.hasDirty) {
+      this.dirtyMinX = x;
+      this.dirtyMinY = y;
+      this.dirtyMaxX = x;
+      this.dirtyMaxY = y;
+      this.hasDirty = true;
+    } else {
+      if (x < this.dirtyMinX) this.dirtyMinX = x;
+      if (y < this.dirtyMinY) this.dirtyMinY = y;
+      if (x > this.dirtyMaxX) this.dirtyMaxX = x;
+      if (y > this.dirtyMaxY) this.dirtyMaxY = y;
+    }
+  }
+
+  private markFullDirty(): void {
+    this.dirtyMinX = 0;
+    this.dirtyMinY = 0;
+    this.dirtyMaxX = this.width - 1;
+    this.dirtyMaxY = this.height - 1;
+    this.hasDirty = true;
+  }
+
+  private resetDirty(): void {
+    this.hasDirty = false;
+    this.dirtyMinX = 0;
+    this.dirtyMinY = 0;
+    this.dirtyMaxX = 0;
+    this.dirtyMaxY = 0;
   }
 }

@@ -9,6 +9,7 @@ import {
   visibleLength,
 } from "./ansi.ts";
 import type { Canvas } from "./canvas.ts";
+import type { KeyEvent } from "./input.ts";
 
 // Base types
 export interface Rect {
@@ -29,6 +30,45 @@ export interface Style {
 
 export interface Component {
   render(canvas: Canvas, rect: Rect): void;
+}
+
+/** Result of a component handling a key event. undefined = not handled, bubble up. */
+export type KeyResult<U> = U | undefined | void;
+
+/** A function that handles a key event and optionally returns an update. */
+export type KeyHandler<U> = (event: KeyEvent) => KeyResult<U>;
+
+/** A Component that can also handle key input. Extends Component, so it's backward-compatible. */
+export interface InputComponent<U> extends Component {
+  handleKey: KeyHandler<U>;
+}
+
+// Update types for interactive components
+export interface TextInputUpdate {
+  value: string;
+  cursorPos: number;
+}
+
+export interface CheckboxUpdate {
+  checked: boolean;
+}
+
+export interface SelectUpdate {
+  selected: number;
+  open: boolean;
+}
+
+export interface ListUpdate {
+  selected: number;
+}
+
+export interface TabsUpdate {
+  activeTab: string;
+}
+
+export interface TreeUpdate {
+  selected: string;
+  toggled?: string;
 }
 
 // Style helpers
@@ -361,30 +401,93 @@ export function Spinner(props: SpinnerProps): Component {
 
 // List component
 export interface ListProps {
-  items: string[];
+  items: (string | Component)[];
   selected?: number;
   selectedStyle?: Style;
   itemStyle?: Style;
   bullet?: string;
+  itemHeight?: number;
+  renderItem?: (
+    item: string | Component,
+    index: number,
+    selected: boolean,
+  ) => Component;
 }
 
-export function List(props: ListProps): Component {
+export function List(props: ListProps): InputComponent<ListUpdate> {
   return {
     render(canvas: Canvas, rect: Rect) {
       const bullet = props.bullet ?? "•";
+      const itemH = props.itemHeight ?? 1;
 
-      for (let i = 0; i < props.items.length && i < rect.height; i++) {
+      for (
+        let i = 0;
+        i < props.items.length && i * itemH < rect.height;
+        i++
+      ) {
         const isSelected = props.selected === i;
+        const item = props.items[i];
+
+        // Custom render callback takes priority
+        if (props.renderItem) {
+          const component = props.renderItem(item, i, isSelected);
+          component.render(canvas, {
+            x: rect.x,
+            y: rect.y + i * itemH,
+            width: rect.width,
+            height: itemH,
+          });
+          continue;
+        }
+
+        // Component items render directly
+        if (typeof item !== "string") {
+          const itemRect: Rect = {
+            x: rect.x,
+            y: rect.y + i * itemH,
+            width: rect.width,
+            height: itemH,
+          };
+          if (isSelected && props.selectedStyle?.bg) {
+            canvas.fill(
+              itemRect.x,
+              itemRect.y,
+              itemRect.width,
+              itemRect.height,
+              " ",
+              { bg: props.selectedStyle.bg },
+            );
+          }
+          item.render(canvas, itemRect);
+          continue;
+        }
+
+        // String items with bullet prefix (original behavior)
         const style = isSelected ? props.selectedStyle : props.itemStyle;
         const prefix = isSelected ? "› " : `${bullet} `;
-        const text = prefix + props.items[i];
+        const text = prefix + item;
 
-        canvas.text(rect.x, rect.y + i, text, {
+        canvas.text(rect.x, rect.y + i * itemH, text, {
           fg: style?.fg,
           bg: style?.bg,
           style: style ? buildStyle(style) : undefined,
         });
       }
+    },
+
+    handleKey(event: KeyEvent): ListUpdate | undefined {
+      const selected = props.selected ?? 0;
+      if (event.key === "Up") {
+        return { selected: Math.max(0, selected - 1) };
+      }
+      if (event.key === "Down") {
+        return { selected: Math.min(props.items.length - 1, selected + 1) };
+      }
+      if (event.key === "Home") return { selected: 0 };
+      if (event.key === "End") {
+        return { selected: props.items.length - 1 };
+      }
+      return undefined;
     },
   };
 }
@@ -397,6 +500,14 @@ export interface TableProps {
   headerStyle?: Style;
   cellStyle?: Style;
   border?: boolean;
+  selectedRow?: number;
+  selectedStyle?: Style;
+  rowStyle?: (rowIndex: number, row: string[]) => Style | undefined;
+  cellStyleFn?: (
+    rowIndex: number,
+    colIndex: number,
+    value: string,
+  ) => Style | undefined;
 }
 
 export function Table(props: TableProps): Component {
@@ -447,20 +558,37 @@ export function Table(props: TableProps): Component {
       }
 
       // Draw rows
-      for (const row of rows) {
+      for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
         if (y >= rect.y + rect.height) break;
+        const row = rows[rowIdx];
+        const isSelectedRow = props.selectedRow === rowIdx;
 
         let x = rect.x;
-        for (let i = 0; i < row.length; i++) {
-          const text = padOrTruncate(row[i], colWidths[i] ?? 10);
+        for (let colIdx = 0; colIdx < row.length; colIdx++) {
+          const text = padOrTruncate(row[colIdx], colWidths[colIdx] ?? 10);
+
+          // Style priority: cellStyleFn > rowStyle > selectedRow > cellStyle
+          const cellFnStyle = props.cellStyleFn?.(
+            rowIdx,
+            colIdx,
+            row[colIdx],
+          );
+          const rowFnStyle = props.rowStyle?.(rowIdx, row);
+          const selectedFnStyle = isSelectedRow
+            ? props.selectedStyle
+            : undefined;
+          const effectiveStyle = cellFnStyle ?? rowFnStyle ??
+            selectedFnStyle ?? props.cellStyle;
+
           canvas.text(x, y, text, {
-            fg: props.cellStyle?.fg,
-            bg: props.cellStyle?.bg,
+            fg: effectiveStyle?.fg,
+            bg: effectiveStyle?.bg,
+            style: effectiveStyle ? buildStyle(effectiveStyle) : undefined,
           });
-          if (border && i < row.length - 1) {
-            canvas.set(x + (colWidths[i] ?? 10) + 1, y, { char: "│" });
+          if (border && colIdx < row.length - 1) {
+            canvas.set(x + (colWidths[colIdx] ?? 10) + 1, y, { char: "│" });
           }
-          x += (colWidths[i] ?? 10) + separatorWidth;
+          x += (colWidths[colIdx] ?? 10) + separatorWidth;
         }
         y++;
       }
@@ -682,6 +810,193 @@ export function ScrollBox(props: ScrollBoxProps): Component {
   };
 }
 
+// Scrollbar position utility — reusable for custom scrollable components
+export interface ScrollbarInfo {
+  thumbPos: number;
+  thumbSize: number;
+}
+
+export function scrollbarPosition(params: {
+  contentHeight: number;
+  viewportHeight: number;
+  scrollY: number;
+}): ScrollbarInfo {
+  const { contentHeight, viewportHeight, scrollY } = params;
+  const scrollRatio = scrollY / Math.max(1, contentHeight - viewportHeight);
+  const thumbSize = Math.max(
+    1,
+    Math.floor((viewportHeight / contentHeight) * viewportHeight),
+  );
+  const thumbPos = Math.floor(scrollRatio * (viewportHeight - thumbSize));
+  return { thumbPos, thumbSize };
+}
+
+// VirtualScrollBox - scrollable container that only renders visible content
+export interface VisibleRange {
+  start: number;
+  end: number;
+}
+
+export interface VirtualScrollBoxProps {
+  scrollY: number;
+  contentHeight: number;
+  border?: BorderStyle;
+  borderColor?: string;
+  title?: string;
+  showScrollbar?: boolean;
+  /** Called with the visible row range. Render ONLY visible items. */
+  renderSlice: (
+    canvas: Canvas,
+    rect: Rect,
+    range: VisibleRange,
+  ) => void;
+}
+
+export function VirtualScrollBox(props: VirtualScrollBoxProps): Component {
+  const border = props.border ?? "single";
+  const borderChars = borders[border];
+
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      // Draw border
+      if (borderChars) {
+        const bc = props.borderColor;
+
+        canvas.set(rect.x, rect.y, { char: borderChars.topLeft, fg: bc });
+        canvas.set(rect.x + rect.width - 1, rect.y, {
+          char: borderChars.topRight,
+          fg: bc,
+        });
+        canvas.set(rect.x, rect.y + rect.height - 1, {
+          char: borderChars.bottomLeft,
+          fg: bc,
+        });
+        canvas.set(rect.x + rect.width - 1, rect.y + rect.height - 1, {
+          char: borderChars.bottomRight,
+          fg: bc,
+        });
+
+        for (let x = 1; x < rect.width - 1; x++) {
+          canvas.set(rect.x + x, rect.y, {
+            char: borderChars.horizontal,
+            fg: bc,
+          });
+          canvas.set(rect.x + x, rect.y + rect.height - 1, {
+            char: borderChars.horizontal,
+            fg: bc,
+          });
+        }
+
+        for (let y = 1; y < rect.height - 1; y++) {
+          canvas.set(rect.x, rect.y + y, {
+            char: borderChars.vertical,
+            fg: bc,
+          });
+        }
+
+        if (props.title) {
+          const title = ` ${props.title} `;
+          canvas.text(rect.x + 2, rect.y, title, { fg: bc });
+        }
+      }
+
+      // Calculate viewport dimensions
+      const borderOffset = borderChars ? 1 : 0;
+      const viewportHeight = rect.height - borderOffset * 2;
+      const showScrollbar = props.showScrollbar !== false &&
+        props.contentHeight > viewportHeight;
+
+      // Draw scrollbar
+      if (showScrollbar) {
+        const scrollbarX = rect.x + rect.width - 1;
+        const { thumbPos, thumbSize } = scrollbarPosition({
+          contentHeight: props.contentHeight,
+          viewportHeight,
+          scrollY: props.scrollY,
+        });
+
+        for (let y = 0; y < viewportHeight; y++) {
+          const isThumb = y >= thumbPos && y < thumbPos + thumbSize;
+          canvas.set(scrollbarX, rect.y + borderOffset + y, {
+            char: isThumb ? "█" : "░",
+            fg: props.borderColor,
+          });
+        }
+      }
+
+      // Calculate visible range and render only the visible slice
+      const viewportWidth = rect.width - borderOffset * 2 -
+        (showScrollbar ? 1 : 0);
+      const start = Math.max(0, Math.floor(props.scrollY));
+      const end = Math.min(
+        props.contentHeight,
+        start + viewportHeight,
+      );
+
+      const sliceRect: Rect = {
+        x: rect.x + borderOffset,
+        y: rect.y + borderOffset,
+        width: viewportWidth,
+        height: viewportHeight,
+      };
+
+      props.renderSlice(canvas, sliceRect, { start, end });
+    },
+  };
+}
+
+// VirtualList - virtualized list with render callback for each item
+export interface VirtualListProps<T> {
+  items: T[];
+  selected?: number;
+  itemHeight?: number;
+  scrollY: number;
+  border?: BorderStyle;
+  borderColor?: string;
+  title?: string;
+  showScrollbar?: boolean;
+  renderItem: (item: T, index: number, selected: boolean) => Component;
+}
+
+export function VirtualList<T>(props: VirtualListProps<T>): Component {
+  const itemHeight = props.itemHeight ?? 1;
+  const contentHeight = props.items.length * itemHeight;
+
+  return VirtualScrollBox({
+    scrollY: props.scrollY,
+    contentHeight,
+    border: props.border,
+    borderColor: props.borderColor,
+    title: props.title,
+    showScrollbar: props.showScrollbar,
+    renderSlice(canvas: Canvas, rect: Rect, range: VisibleRange) {
+      const startItem = Math.floor(range.start / itemHeight);
+      const endItem = Math.min(
+        props.items.length,
+        Math.ceil(range.end / itemHeight),
+      );
+
+      for (let i = startItem; i < endItem; i++) {
+        const isSelected = props.selected === i;
+        const itemY = rect.y + (i * itemHeight - range.start);
+        const itemRect: Rect = {
+          x: rect.x,
+          y: itemY,
+          width: rect.width,
+          height: itemHeight,
+        };
+
+        const component = props.renderItem(
+          props.items[i],
+          i,
+          isSelected,
+        );
+        component.render(canvas, itemRect);
+      }
+    },
+  });
+}
+
 // TextInput - editable text field
 export interface TextInputProps {
   value: string;
@@ -693,7 +1008,9 @@ export interface TextInputProps {
   width?: number;
 }
 
-export function TextInput(props: TextInputProps): Component {
+export function TextInput(
+  props: TextInputProps,
+): InputComponent<TextInputUpdate> {
   return {
     render(canvas: Canvas, rect: Rect) {
       const width = props.width ?? rect.width;
@@ -740,6 +1057,52 @@ export function TextInput(props: TextInputProps): Component {
           bg: props.style?.bg,
         });
       }
+    },
+
+    handleKey(event: KeyEvent): TextInputUpdate | undefined {
+      const { value, cursorPos } = props;
+
+      // Character insertion
+      if (event.key.length === 1 && !event.ctrl && !event.alt) {
+        return {
+          value: value.slice(0, cursorPos) + event.key + value.slice(cursorPos),
+          cursorPos: cursorPos + 1,
+        };
+      }
+      if (event.key === "Backspace" && cursorPos > 0) {
+        return {
+          value: value.slice(0, cursorPos - 1) + value.slice(cursorPos),
+          cursorPos: cursorPos - 1,
+        };
+      }
+      if (event.key === "Delete" && cursorPos < value.length) {
+        return {
+          value: value.slice(0, cursorPos) + value.slice(cursorPos + 1),
+          cursorPos,
+        };
+      }
+      if (event.key === "Left") {
+        return { value, cursorPos: Math.max(0, cursorPos - 1) };
+      }
+      if (event.key === "Right") {
+        return { value, cursorPos: Math.min(value.length, cursorPos + 1) };
+      }
+      if (event.key === "Home") return { value, cursorPos: 0 };
+      if (event.key === "End") return { value, cursorPos: value.length };
+
+      // Readline-style shortcuts
+      if (event.key === "a" && event.ctrl) return { value, cursorPos: 0 };
+      if (event.key === "e" && event.ctrl) {
+        return { value, cursorPos: value.length };
+      }
+      if (event.key === "k" && event.ctrl) {
+        return { value: value.slice(0, cursorPos), cursorPos };
+      }
+      if (event.key === "u" && event.ctrl) {
+        return { value: value.slice(cursorPos), cursorPos: 0 };
+      }
+
+      return undefined;
     },
   };
 }
@@ -854,13 +1217,423 @@ export function Divider(props: DividerProps = {}): Component {
 export interface BadgeProps {
   text: string;
   style?: Style;
+  padding?: number | { left?: number; right?: number };
 }
 
 export function Badge(props: BadgeProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
-      const text = ` ${props.text} `;
+      let padLeft = 1;
+      let padRight = 1;
+      if (typeof props.padding === "number") {
+        padLeft = props.padding;
+        padRight = props.padding;
+      } else if (props.padding) {
+        padLeft = props.padding.left ?? 1;
+        padRight = props.padding.right ?? 1;
+      }
+      const text = " ".repeat(padLeft) + props.text + " ".repeat(padRight);
       canvas.text(rect.x, rect.y, text, {
+        fg: props.style?.fg ?? colors.fg.black,
+        bg: props.style?.bg ?? colors.bg.white,
+        style: props.style ? buildStyle(props.style) : undefined,
+      });
+    },
+  };
+}
+
+// Dialog - modal overlay with dimmed background
+export interface DialogProps {
+  title?: string;
+  border?: BorderStyle;
+  borderColor?: string;
+  width: number;
+  height: number;
+  child: Component;
+  dimBg?: string;
+}
+
+export function Dialog(props: DialogProps): Component {
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      // Dim background
+      canvas.fill(rect.x, rect.y, rect.width, rect.height, " ", {
+        bg: props.dimBg ?? colors.bg.black,
+      });
+
+      // Center the dialog box
+      const x = rect.x + Math.floor((rect.width - props.width) / 2);
+      const y = rect.y + Math.floor((rect.height - props.height) / 2);
+
+      const box = Box({
+        border: props.border ?? "rounded",
+        borderColor: props.borderColor,
+        title: props.title,
+        child: props.child,
+      });
+
+      box.render(canvas, { x, y, width: props.width, height: props.height });
+    },
+  };
+}
+
+// Tabs - tab bar with switchable content panels
+export interface Tab {
+  id: string;
+  label: string;
+  content: Component;
+}
+
+export interface TabsProps {
+  tabs: Tab[];
+  activeTab: string;
+  tabStyle?: Style;
+  activeTabStyle?: Style;
+}
+
+export function Tabs(props: TabsProps): InputComponent<TabsUpdate> {
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      // Render tab bar on first row
+      let x = rect.x;
+      for (const tab of props.tabs) {
+        const isActive = tab.id === props.activeTab;
+        const style = isActive ? props.activeTabStyle : props.tabStyle;
+        const label = ` ${tab.label} `;
+
+        canvas.text(x, rect.y, label, {
+          fg: style?.fg ?? (isActive ? colors.fg.white : colors.fg.gray),
+          bg: style?.bg,
+          style: style ? buildStyle(style) : undefined,
+        });
+
+        // Underline active tab
+        if (isActive) {
+          canvas.hline(x, rect.y + 1, visibleLength(label), "─", {
+            fg: style?.fg ?? colors.fg.white,
+          });
+        }
+
+        x += visibleLength(label) + 1;
+      }
+
+      // Render active tab content below tab bar
+      const activeTab = props.tabs.find((t) => t.id === props.activeTab);
+      if (activeTab) {
+        activeTab.content.render(canvas, {
+          x: rect.x,
+          y: rect.y + 2,
+          width: rect.width,
+          height: rect.height - 2,
+        });
+      }
+    },
+
+    handleKey(event: KeyEvent): TabsUpdate | undefined {
+      const idx = props.tabs.findIndex((t) => t.id === props.activeTab);
+      if (event.key === "Left" && idx > 0) {
+        return { activeTab: props.tabs[idx - 1].id };
+      }
+      if (event.key === "Right" && idx < props.tabs.length - 1) {
+        return { activeTab: props.tabs[idx + 1].id };
+      }
+      return undefined;
+    },
+  };
+}
+
+// Select - dropdown-style selector
+export interface SelectProps {
+  options: string[];
+  selected: number;
+  open?: boolean;
+  style?: Style;
+  selectedStyle?: Style;
+  maxVisible?: number;
+}
+
+export function Select(props: SelectProps): InputComponent<SelectUpdate> {
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      const selectedText = props.options[props.selected] ?? "";
+      const indicator = props.open ? "▾" : "▸";
+
+      // Render the closed display
+      canvas.text(rect.x, rect.y, `${indicator} ${selectedText}`, {
+        fg: props.style?.fg,
+        bg: props.style?.bg,
+        style: props.style ? buildStyle(props.style) : undefined,
+      });
+
+      // Render dropdown if open
+      if (props.open) {
+        const maxVis = props.maxVisible ?? Math.min(props.options.length, 10);
+        for (let i = 0; i < maxVis && i < props.options.length; i++) {
+          const isSelected = i === props.selected;
+          const style = isSelected ? props.selectedStyle : props.style;
+          const prefix = isSelected ? "› " : "  ";
+          canvas.text(rect.x, rect.y + 1 + i, prefix + props.options[i], {
+            fg: style?.fg,
+            bg: style?.bg,
+            style: style ? buildStyle(style) : undefined,
+          });
+        }
+      }
+    },
+
+    handleKey(event: KeyEvent): SelectUpdate | undefined {
+      const { selected, open } = props;
+      if (!open) {
+        if (event.key === " " || event.key === "Enter") {
+          return { selected, open: true };
+        }
+        return undefined;
+      }
+      // Open state
+      if (event.key === "Up") {
+        return { selected: Math.max(0, selected - 1), open: true };
+      }
+      if (event.key === "Down") {
+        return {
+          selected: Math.min(props.options.length - 1, selected + 1),
+          open: true,
+        };
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        return { selected, open: false };
+      }
+      if (event.key === "Escape") {
+        return { selected, open: false };
+      }
+      return undefined;
+    },
+  };
+}
+
+// Checkbox
+export interface CheckboxProps {
+  checked: boolean;
+  label?: string;
+  style?: Style;
+  checkedChar?: string;
+  uncheckedChar?: string;
+}
+
+export function Checkbox(
+  props: CheckboxProps,
+): InputComponent<CheckboxUpdate> {
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      const checked = props.checkedChar ?? "✓";
+      const unchecked = props.uncheckedChar ?? " ";
+      const box = props.checked ? `[${checked}]` : `[${unchecked}]`;
+      const text = props.label ? `${box} ${props.label}` : box;
+
+      canvas.text(rect.x, rect.y, text, {
+        fg: props.style?.fg,
+        bg: props.style?.bg,
+        style: props.style ? buildStyle(props.style) : undefined,
+      });
+    },
+
+    handleKey(event: KeyEvent): CheckboxUpdate | undefined {
+      if (event.key === " " || event.key === "Enter") {
+        return { checked: !props.checked };
+      }
+      return undefined;
+    },
+  };
+}
+
+// Tree - recursive node tree
+export interface TreeNode {
+  label: string;
+  children?: TreeNode[];
+  expanded?: boolean;
+}
+
+export interface TreeProps {
+  nodes: TreeNode[];
+  selected?: string;
+  indent?: number;
+  style?: Style;
+  selectedStyle?: Style;
+  renderNode?: (
+    node: TreeNode,
+    depth: number,
+    expanded: boolean,
+  ) => Component;
+}
+
+export function Tree(props: TreeProps): InputComponent<TreeUpdate> {
+  const indent = props.indent ?? 2;
+
+  // Collect visible node labels in render order
+  function getVisibleLabels(nodes: TreeNode[]): string[] {
+    const labels: string[] = [];
+    function walk(ns: TreeNode[]): void {
+      for (const node of ns) {
+        labels.push(node.label);
+        if (
+          node.children && node.children.length > 0 &&
+          (node.expanded ?? false)
+        ) {
+          walk(node.children);
+        }
+      }
+    }
+    walk(nodes);
+    return labels;
+  }
+
+  // Find a node by label
+  function findNode(
+    nodes: TreeNode[],
+    label: string,
+  ): { node: TreeNode; hasChildren: boolean } | undefined {
+    for (const node of nodes) {
+      if (node.label === label) {
+        return {
+          node,
+          hasChildren: !!(node.children && node.children.length > 0),
+        };
+      }
+      if (
+        node.children && node.children.length > 0 &&
+        (node.expanded ?? false)
+      ) {
+        const found = findNode(node.children, label);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  }
+
+  // Find parent label of a node
+  function findParentLabel(
+    nodes: TreeNode[],
+    label: string,
+    parent?: string,
+  ): string | undefined {
+    for (const node of nodes) {
+      if (node.label === label) return parent;
+      if (
+        node.children && node.children.length > 0 &&
+        (node.expanded ?? false)
+      ) {
+        const found = findParentLabel(node.children, label, node.label);
+        if (found !== undefined) return found;
+      }
+    }
+    return undefined;
+  }
+
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      let y = rect.y;
+
+      function renderNodes(nodes: TreeNode[], depth: number): void {
+        for (const node of nodes) {
+          if (y >= rect.y + rect.height) return;
+
+          const hasChildren = node.children && node.children.length > 0;
+          const expanded = node.expanded ?? false;
+          const isSelected = node.label === props.selected;
+          const style = isSelected ? props.selectedStyle : props.style;
+
+          if (props.renderNode) {
+            const component = props.renderNode(node, depth, expanded);
+            component.render(canvas, {
+              x: rect.x + depth * indent,
+              y,
+              width: rect.width - depth * indent,
+              height: 1,
+            });
+          } else {
+            const prefix = hasChildren ? (expanded ? "▾ " : "▸ ") : "  ";
+            const padding = " ".repeat(depth * indent);
+            canvas.text(rect.x, y, padding + prefix + node.label, {
+              fg: style?.fg,
+              bg: style?.bg,
+              style: style ? buildStyle(style) : undefined,
+            });
+          }
+
+          y++;
+
+          if (hasChildren && expanded) {
+            renderNodes(node.children!, depth + 1);
+          }
+        }
+      }
+
+      renderNodes(props.nodes, 0);
+    },
+
+    handleKey(event: KeyEvent): TreeUpdate | undefined {
+      const visible = getVisibleLabels(props.nodes);
+      if (visible.length === 0) return undefined;
+
+      const selected = props.selected ?? visible[0];
+      const idx = visible.indexOf(selected);
+      if (idx === -1) return undefined;
+
+      if (event.key === "Up" && idx > 0) {
+        return { selected: visible[idx - 1] };
+      }
+      if (event.key === "Down" && idx < visible.length - 1) {
+        return { selected: visible[idx + 1] };
+      }
+
+      const found = findNode(props.nodes, selected);
+      if (!found) return undefined;
+
+      if (event.key === "Left") {
+        if (found.hasChildren && (found.node.expanded ?? false)) {
+          return { selected, toggled: selected };
+        }
+        const parentLabel = findParentLabel(props.nodes, selected);
+        if (parentLabel !== undefined) {
+          return { selected: parentLabel };
+        }
+        return undefined;
+      }
+      if (event.key === "Right" || event.key === "Enter") {
+        if (found.hasChildren && !(found.node.expanded ?? false)) {
+          return { selected, toggled: selected };
+        }
+        return undefined;
+      }
+
+      return undefined;
+    },
+  };
+}
+
+// Toast - notification overlay
+export interface ToastProps {
+  message: string;
+  style?: Style;
+  position?: "top" | "bottom";
+  width?: number;
+}
+
+export function Toast(props: ToastProps): Component {
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      const width = props.width ??
+        Math.min(visibleLength(props.message) + 4, rect.width);
+      const x = rect.x + Math.floor((rect.width - width) / 2);
+      const y = props.position === "bottom" ? rect.y + rect.height - 1 : rect.y;
+
+      // Fill background
+      canvas.fill(x, y, width, 1, " ", {
+        bg: props.style?.bg ?? colors.bg.white,
+      });
+
+      // Center text
+      const textX = x + Math.floor((width - visibleLength(props.message)) / 2);
+      canvas.text(textX, y, props.message, {
         fg: props.style?.fg ?? colors.fg.black,
         bg: props.style?.bg ?? colors.bg.white,
         style: props.style ? buildStyle(props.style) : undefined,

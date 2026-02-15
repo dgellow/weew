@@ -3,18 +3,44 @@ import {
   Badge,
   Box,
   buildStyle,
+  Checkbox,
   colors,
+  Dialog,
   Divider,
   FocusContainer,
   List,
   Progress,
+  scrollbarPosition,
   ScrollBox,
+  Select,
   Spinner,
   Table,
+  Tabs,
   Text,
   TextInput,
+  Toast,
+  Tree,
+  VirtualList,
+  VirtualScrollBox,
 } from "./components.ts";
+import type { Rect, VisibleRange } from "./components.ts";
 import { Canvas } from "./canvas.ts";
+import type { KeyEvent } from "./input.ts";
+import { handleFocusGroup } from "./focus.ts";
+
+function key(
+  k: string,
+  mods: { ctrl?: boolean; alt?: boolean; shift?: boolean } = {},
+): KeyEvent {
+  return {
+    key: k,
+    ctrl: mods.ctrl ?? false,
+    alt: mods.alt ?? false,
+    shift: mods.shift ?? false,
+    meta: false,
+    raw: new Uint8Array(),
+  };
+}
 
 Deno.test("buildStyle combines style properties", () => {
   assertEquals(buildStyle({}), "");
@@ -562,4 +588,963 @@ Deno.test("FocusContainer uses custom itemHeight", () => {
   assertEquals(canvas.get(0, 0)?.char, "I");
   // Item B at row 3 (itemHeight=3, no gap)
   assertEquals(canvas.get(0, 3)?.char, "I");
+});
+
+// scrollbarPosition utility
+
+Deno.test("scrollbarPosition calculates thumb position at top", () => {
+  const info = scrollbarPosition({
+    contentHeight: 100,
+    viewportHeight: 10,
+    scrollY: 0,
+  });
+  assertEquals(info.thumbPos, 0);
+  assertEquals(info.thumbSize, 1);
+});
+
+Deno.test("scrollbarPosition calculates thumb position at bottom", () => {
+  const info = scrollbarPosition({
+    contentHeight: 100,
+    viewportHeight: 10,
+    scrollY: 90,
+  });
+  assertEquals(info.thumbPos, 9); // thumbSize=1, pos = 9
+});
+
+Deno.test("scrollbarPosition calculates proportional thumb size", () => {
+  const info = scrollbarPosition({
+    contentHeight: 20,
+    viewportHeight: 10,
+    scrollY: 0,
+  });
+  assertEquals(info.thumbSize, 5); // 10/20 * 10 = 5
+});
+
+// VirtualScrollBox tests
+
+Deno.test("VirtualScrollBox renders border", () => {
+  const canvas = new Canvas(10, 5);
+  const vsb = VirtualScrollBox({
+    scrollY: 0,
+    contentHeight: 10,
+    renderSlice(_canvas: Canvas, _rect: Rect, _range: VisibleRange) {},
+  });
+
+  vsb.render(canvas, { x: 0, y: 0, width: 10, height: 5 });
+
+  assertEquals(canvas.get(0, 0)?.char, "┌");
+  assertEquals(canvas.get(9, 0)?.char, "┐");
+  assertEquals(canvas.get(0, 4)?.char, "└");
+  assertEquals(canvas.get(9, 4)?.char, "┘");
+});
+
+Deno.test("VirtualScrollBox passes correct visible range", () => {
+  const canvas = new Canvas(12, 6);
+  let capturedRange: VisibleRange | null = null;
+
+  const vsb = VirtualScrollBox({
+    scrollY: 5,
+    contentHeight: 20,
+    showScrollbar: false,
+    renderSlice(_canvas: Canvas, _rect: Rect, range: VisibleRange) {
+      capturedRange = range;
+    },
+  });
+
+  vsb.render(canvas, { x: 0, y: 0, width: 12, height: 6 });
+
+  // Viewport height = 6 - 2 (borders) = 4
+  // scrollY = 5, so start = 5, end = min(20, 5+4) = 9
+  assertEquals(capturedRange!.start, 5);
+  assertEquals(capturedRange!.end, 9);
+});
+
+Deno.test("VirtualScrollBox only renders visible content", () => {
+  const canvas = new Canvas(20, 7);
+  let renderCount = 0;
+
+  const vsb = VirtualScrollBox({
+    scrollY: 0,
+    contentHeight: 100,
+    showScrollbar: false,
+    border: "none",
+    renderSlice(c: Canvas, rect: Rect, range: VisibleRange) {
+      for (let i = range.start; i < range.end; i++) {
+        c.text(rect.x, rect.y + (i - range.start), `Line ${i}`);
+        renderCount++;
+      }
+    },
+  });
+
+  vsb.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  // With no border, viewport = 7 lines, so only 7 lines rendered
+  assertEquals(renderCount, 7);
+  assertEquals(canvas.get(0, 0)?.char, "L");
+});
+
+// VirtualList tests
+
+Deno.test("VirtualList renders visible items only", () => {
+  const items = Array.from({ length: 100 }, (_, i) => `Item ${i}`);
+  const renderedIndices: number[] = [];
+
+  const canvas = new Canvas(20, 7);
+  const vlist = VirtualList({
+    items,
+    scrollY: 0,
+    showScrollbar: false,
+    border: "none",
+    renderItem: (_item: string, index: number, _selected: boolean) => {
+      renderedIndices.push(index);
+      return Text(`Item ${index}`);
+    },
+  });
+
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  // Only 7 visible items should be rendered (viewport = 7, no border)
+  assertEquals(renderedIndices.length, 7);
+  assertEquals(renderedIndices[0], 0);
+  assertEquals(renderedIndices[6], 6);
+});
+
+Deno.test("VirtualList passes selected state to renderItem", () => {
+  const items = ["A", "B", "C"];
+  const selectedStates: boolean[] = [];
+
+  const canvas = new Canvas(20, 5);
+  const vlist = VirtualList({
+    items,
+    selected: 1,
+    scrollY: 0,
+    showScrollbar: false,
+    border: "none",
+    renderItem: (_item: string, _index: number, selected: boolean) => {
+      selectedStates.push(selected);
+      return Text("x");
+    },
+  });
+
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  assertEquals(selectedStates, [false, true, false]);
+});
+
+Deno.test("VirtualList with scrollY renders correct slice", () => {
+  const items = Array.from({ length: 20 }, (_, i) => `Item ${i}`);
+  const renderedIndices: number[] = [];
+
+  const canvas = new Canvas(20, 5);
+  const vlist = VirtualList({
+    items,
+    scrollY: 10,
+    showScrollbar: false,
+    border: "none",
+    renderItem: (_item: string, index: number, _selected: boolean) => {
+      renderedIndices.push(index);
+      return Text(`Item ${index}`);
+    },
+  });
+
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  assertEquals(renderedIndices[0], 10);
+  assertEquals(renderedIndices.length, 5);
+});
+
+// Canvas toString tests
+
+Deno.test("Canvas.toString returns plain text grid", () => {
+  const canvas = new Canvas(5, 2);
+  canvas.text(0, 0, "Hello");
+  canvas.text(0, 1, "World");
+
+  const text = canvas.toString();
+  const lines = text.split("\n");
+  assertEquals(lines[0], "Hello");
+  assertEquals(lines[1], "World");
+});
+
+Deno.test("Canvas.regionToString returns sub-region", () => {
+  const canvas = new Canvas(10, 5);
+  canvas.text(2, 1, "AB");
+  canvas.text(2, 2, "CD");
+
+  const region = canvas.regionToString(2, 1, 2, 2);
+  assertEquals(region, "AB\nCD");
+});
+
+// Dialog tests
+
+Deno.test("Dialog renders centered box with border", () => {
+  const canvas = new Canvas(20, 10);
+  const dialog = Dialog({
+    title: "Hi",
+    width: 10,
+    height: 5,
+    child: Text("OK"),
+  });
+
+  dialog.render(canvas, { x: 0, y: 0, width: 20, height: 10 });
+
+  // Dialog centered: x = (20-10)/2 = 5, y = (10-5)/2 = 2
+  assertEquals(canvas.get(5, 2)?.char, "╭"); // rounded border default
+  assertEquals(canvas.get(14, 2)?.char, "╮");
+  // Content inside
+  assertEquals(canvas.get(6, 3)?.char, "O");
+  assertEquals(canvas.get(7, 3)?.char, "K");
+});
+
+// Tabs tests
+
+Deno.test("Tabs renders tab labels and active content", () => {
+  const canvas = new Canvas(30, 10);
+  const tabs = Tabs({
+    tabs: [
+      { id: "a", label: "Tab A", content: Text("Content A") },
+      { id: "b", label: "Tab B", content: Text("Content B") },
+    ],
+    activeTab: "a",
+  });
+
+  tabs.render(canvas, { x: 0, y: 0, width: 30, height: 10 });
+
+  // Tab labels on row 0
+  assertEquals(canvas.get(1, 0)?.char, "T"); // " Tab A " starts at x=0
+  // Active tab content below (row 2)
+  assertEquals(canvas.get(0, 2)?.char, "C");
+  assertEquals(canvas.get(1, 2)?.char, "o");
+});
+
+Deno.test("Tabs renders correct content for active tab", () => {
+  const canvas = new Canvas(30, 10);
+  const tabs = Tabs({
+    tabs: [
+      { id: "a", label: "Tab A", content: Text("AAA") },
+      { id: "b", label: "Tab B", content: Text("BBB") },
+    ],
+    activeTab: "b",
+  });
+
+  tabs.render(canvas, { x: 0, y: 0, width: 30, height: 10 });
+
+  // Content for tab B
+  assertEquals(canvas.get(0, 2)?.char, "B");
+});
+
+// Select tests
+
+Deno.test("Select renders closed state", () => {
+  const canvas = new Canvas(20, 5);
+  const select = Select({
+    options: ["Red", "Green", "Blue"],
+    selected: 1,
+  });
+
+  select.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  assertEquals(canvas.get(0, 0)?.char, "▸"); // closed indicator
+  assertEquals(canvas.get(2, 0)?.char, "G"); // "Green"
+});
+
+Deno.test("Select renders open state with options", () => {
+  const canvas = new Canvas(20, 10);
+  const select = Select({
+    options: ["Red", "Green", "Blue"],
+    selected: 1,
+    open: true,
+  });
+
+  select.render(canvas, { x: 0, y: 0, width: 20, height: 10 });
+
+  assertEquals(canvas.get(0, 0)?.char, "▾"); // open indicator
+  // Options listed below
+  assertEquals(canvas.get(2, 1)?.char, "R"); // Red (not selected, so "  R...")
+  assertEquals(canvas.get(2, 2)?.char, "G"); // Green (selected, "› G...")
+  assertEquals(canvas.get(0, 2)?.char, "›"); // selected indicator
+});
+
+// Checkbox tests
+
+Deno.test("Checkbox renders unchecked", () => {
+  const canvas = new Canvas(20, 1);
+  const cb = Checkbox({ checked: false, label: "Accept" });
+
+  cb.render(canvas, { x: 0, y: 0, width: 20, height: 1 });
+
+  assertEquals(canvas.get(0, 0)?.char, "[");
+  assertEquals(canvas.get(1, 0)?.char, " ");
+  assertEquals(canvas.get(2, 0)?.char, "]");
+  assertEquals(canvas.get(4, 0)?.char, "A"); // label
+});
+
+Deno.test("Checkbox renders checked", () => {
+  const canvas = new Canvas(20, 1);
+  const cb = Checkbox({ checked: true, label: "Accept" });
+
+  cb.render(canvas, { x: 0, y: 0, width: 20, height: 1 });
+
+  assertEquals(canvas.get(1, 0)?.char, "✓");
+});
+
+// Tree tests
+
+Deno.test("Tree renders flat nodes", () => {
+  const canvas = new Canvas(20, 5);
+  const tree = Tree({
+    nodes: [
+      { label: "A" },
+      { label: "B" },
+      { label: "C" },
+    ],
+  });
+
+  tree.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  assertEquals(canvas.get(2, 0)?.char, "A");
+  assertEquals(canvas.get(2, 1)?.char, "B");
+  assertEquals(canvas.get(2, 2)?.char, "C");
+});
+
+Deno.test("Tree renders expanded children with indent", () => {
+  const canvas = new Canvas(20, 5);
+  const tree = Tree({
+    nodes: [
+      {
+        label: "Parent",
+        expanded: true,
+        children: [
+          { label: "Child" },
+        ],
+      },
+    ],
+  });
+
+  tree.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  // Parent has "▾ " prefix
+  assertEquals(canvas.get(0, 0)?.char, "▾");
+  assertEquals(canvas.get(2, 0)?.char, "P");
+  // Child indented by 2 (default indent) + "  " prefix
+  assertEquals(canvas.get(4, 1)?.char, "C");
+});
+
+Deno.test("Tree hides collapsed children", () => {
+  const canvas = new Canvas(20, 5);
+  const tree = Tree({
+    nodes: [
+      {
+        label: "Parent",
+        expanded: false,
+        children: [
+          { label: "Child" },
+        ],
+      },
+      { label: "Sibling" },
+    ],
+  });
+
+  tree.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  // Parent at row 0, Sibling at row 1 (child hidden)
+  assertEquals(canvas.get(0, 0)?.char, "▸"); // collapsed indicator
+  assertEquals(canvas.get(2, 1)?.char, "S"); // Sibling
+});
+
+// Toast tests
+
+Deno.test("Toast renders centered at top", () => {
+  const canvas = new Canvas(20, 5);
+  const toast = Toast({ message: "OK" });
+
+  toast.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  // Toast at top (y=0), centered
+  // Width = min(2+4, 20) = 6, x = (20-6)/2 = 7
+  // Text centered in the 6-wide bar
+  assertEquals(canvas.get(9, 0)?.char, "O");
+  assertEquals(canvas.get(10, 0)?.char, "K");
+});
+
+Deno.test("Toast renders at bottom", () => {
+  const canvas = new Canvas(20, 5);
+  const toast = Toast({ message: "OK", position: "bottom" });
+
+  toast.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  // y = 0 + 5 - 1 = 4
+  assertEquals(canvas.get(9, 4)?.char, "O");
+});
+
+// Table per-cell styling
+
+Deno.test("Table selectedRow highlights entire row", () => {
+  const canvas = new Canvas(40, 5);
+  const table = Table({
+    rows: [["A", "1"], ["B", "2"]],
+    selectedRow: 1,
+    selectedStyle: { fg: colors.fg.cyan },
+    border: false,
+    columnWidths: [5, 5],
+  });
+
+  table.render(canvas, { x: 0, y: 0, width: 40, height: 5 });
+
+  // Row 1 should have selectedStyle
+  assertEquals(canvas.get(0, 1)?.fg, colors.fg.cyan);
+});
+
+// List with Component items
+
+Deno.test("List renders Component items", () => {
+  const canvas = new Canvas(20, 5);
+  const list = List({
+    items: [
+      Box({ border: "single", child: Text("A") }),
+      Text("B"),
+    ],
+    itemHeight: 3,
+  });
+
+  list.render(canvas, { x: 0, y: 0, width: 20, height: 10 });
+
+  // First item is a Box with border
+  assertEquals(canvas.get(0, 0)?.char, "┌");
+  // Second item is Text at y=3
+  assertEquals(canvas.get(0, 3)?.char, "B");
+});
+
+Deno.test("List renderItem callback", () => {
+  const canvas = new Canvas(20, 5);
+  const list = List({
+    items: ["A", "B", "C"],
+    selected: 1,
+    renderItem: (item, _index, selected) => {
+      const prefix = selected ? ">> " : "   ";
+      return Text(prefix + item);
+    },
+  });
+
+  list.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  // Custom render: ">> B" at row 1
+  assertEquals(canvas.get(0, 1)?.char, ">");
+  assertEquals(canvas.get(1, 1)?.char, ">");
+  assertEquals(canvas.get(3, 1)?.char, "B");
+});
+
+// Badge padding
+
+Deno.test("Badge respects custom padding", () => {
+  const canvas = new Canvas(20, 1);
+  const badge = Badge({ text: "OK", padding: 0 });
+
+  badge.render(canvas, { x: 0, y: 0, width: 20, height: 1 });
+
+  // No padding: "OK" starts at x=0
+  assertEquals(canvas.get(0, 0)?.char, "O");
+  assertEquals(canvas.get(1, 0)?.char, "K");
+});
+
+Deno.test("Badge respects asymmetric padding", () => {
+  const canvas = new Canvas(20, 1);
+  const badge = Badge({ text: "OK", padding: { left: 2, right: 0 } });
+
+  badge.render(canvas, { x: 0, y: 0, width: 20, height: 1 });
+
+  // 2 spaces then "OK"
+  assertEquals(canvas.get(0, 0)?.char, " ");
+  assertEquals(canvas.get(1, 0)?.char, " ");
+  assertEquals(canvas.get(2, 0)?.char, "O");
+  assertEquals(canvas.get(3, 0)?.char, "K");
+});
+
+// ============================================================
+// handleKey tests
+// ============================================================
+
+// TextInput.handleKey
+
+Deno.test("TextInput.handleKey inserts character", () => {
+  const input = TextInput({ value: "ab", cursorPos: 1 });
+  const result = input.handleKey(key("x"));
+  assertEquals(result, { value: "axb", cursorPos: 2 });
+});
+
+Deno.test("TextInput.handleKey handles Backspace", () => {
+  const input = TextInput({ value: "abc", cursorPos: 2 });
+  const result = input.handleKey(key("Backspace"));
+  assertEquals(result, { value: "ac", cursorPos: 1 });
+});
+
+Deno.test("TextInput.handleKey Backspace at start does nothing", () => {
+  const input = TextInput({ value: "abc", cursorPos: 0 });
+  const result = input.handleKey(key("Backspace"));
+  assertEquals(result, undefined);
+});
+
+Deno.test("TextInput.handleKey handles Delete", () => {
+  const input = TextInput({ value: "abc", cursorPos: 1 });
+  const result = input.handleKey(key("Delete"));
+  assertEquals(result, { value: "ac", cursorPos: 1 });
+});
+
+Deno.test("TextInput.handleKey Delete at end does nothing", () => {
+  const input = TextInput({ value: "abc", cursorPos: 3 });
+  const result = input.handleKey(key("Delete"));
+  assertEquals(result, undefined);
+});
+
+Deno.test("TextInput.handleKey moves cursor left", () => {
+  const input = TextInput({ value: "abc", cursorPos: 2 });
+  const result = input.handleKey(key("Left"));
+  assertEquals(result, { value: "abc", cursorPos: 1 });
+});
+
+Deno.test("TextInput.handleKey moves cursor right", () => {
+  const input = TextInput({ value: "abc", cursorPos: 1 });
+  const result = input.handleKey(key("Right"));
+  assertEquals(result, { value: "abc", cursorPos: 2 });
+});
+
+Deno.test("TextInput.handleKey Home moves to start", () => {
+  const input = TextInput({ value: "abc", cursorPos: 2 });
+  const result = input.handleKey(key("Home"));
+  assertEquals(result, { value: "abc", cursorPos: 0 });
+});
+
+Deno.test("TextInput.handleKey End moves to end", () => {
+  const input = TextInput({ value: "abc", cursorPos: 0 });
+  const result = input.handleKey(key("End"));
+  assertEquals(result, { value: "abc", cursorPos: 3 });
+});
+
+Deno.test("TextInput.handleKey Ctrl+A moves to start", () => {
+  const input = TextInput({ value: "abc", cursorPos: 2 });
+  const result = input.handleKey(key("a", { ctrl: true }));
+  assertEquals(result, { value: "abc", cursorPos: 0 });
+});
+
+Deno.test("TextInput.handleKey Ctrl+E moves to end", () => {
+  const input = TextInput({ value: "abc", cursorPos: 0 });
+  const result = input.handleKey(key("e", { ctrl: true }));
+  assertEquals(result, { value: "abc", cursorPos: 3 });
+});
+
+Deno.test("TextInput.handleKey Ctrl+K kills to end of line", () => {
+  const input = TextInput({ value: "abcdef", cursorPos: 3 });
+  const result = input.handleKey(key("k", { ctrl: true }));
+  assertEquals(result, { value: "abc", cursorPos: 3 });
+});
+
+Deno.test("TextInput.handleKey Ctrl+U kills to start of line", () => {
+  const input = TextInput({ value: "abcdef", cursorPos: 3 });
+  const result = input.handleKey(key("u", { ctrl: true }));
+  assertEquals(result, { value: "def", cursorPos: 0 });
+});
+
+Deno.test("TextInput.handleKey bubbles Tab", () => {
+  const input = TextInput({ value: "abc", cursorPos: 0 });
+  assertEquals(input.handleKey(key("Tab")), undefined);
+});
+
+Deno.test("TextInput.handleKey bubbles Enter", () => {
+  const input = TextInput({ value: "abc", cursorPos: 0 });
+  assertEquals(input.handleKey(key("Enter")), undefined);
+});
+
+Deno.test("TextInput.handleKey bubbles Escape", () => {
+  const input = TextInput({ value: "abc", cursorPos: 0 });
+  assertEquals(input.handleKey(key("Escape")), undefined);
+});
+
+Deno.test("TextInput.handleKey bubbles Ctrl+C", () => {
+  const input = TextInput({ value: "abc", cursorPos: 0 });
+  assertEquals(input.handleKey(key("c", { ctrl: true })), undefined);
+});
+
+// Checkbox.handleKey
+
+Deno.test("Checkbox.handleKey Space toggles on", () => {
+  const cb = Checkbox({ checked: false });
+  assertEquals(cb.handleKey(key(" ")), { checked: true });
+});
+
+Deno.test("Checkbox.handleKey Space toggles off", () => {
+  const cb = Checkbox({ checked: true });
+  assertEquals(cb.handleKey(key(" ")), { checked: false });
+});
+
+Deno.test("Checkbox.handleKey Enter toggles", () => {
+  const cb = Checkbox({ checked: false });
+  assertEquals(cb.handleKey(key("Enter")), { checked: true });
+});
+
+Deno.test("Checkbox.handleKey bubbles other keys", () => {
+  const cb = Checkbox({ checked: false });
+  assertEquals(cb.handleKey(key("a")), undefined);
+  assertEquals(cb.handleKey(key("Tab")), undefined);
+});
+
+// Select.handleKey
+
+Deno.test("Select.handleKey opens on Space when closed", () => {
+  const sel = Select({ options: ["A", "B", "C"], selected: 0 });
+  assertEquals(sel.handleKey(key(" ")), { selected: 0, open: true });
+});
+
+Deno.test("Select.handleKey opens on Enter when closed", () => {
+  const sel = Select({ options: ["A", "B", "C"], selected: 1 });
+  assertEquals(sel.handleKey(key("Enter")), { selected: 1, open: true });
+});
+
+Deno.test("Select.handleKey bubbles other keys when closed", () => {
+  const sel = Select({ options: ["A", "B", "C"], selected: 0 });
+  assertEquals(sel.handleKey(key("Up")), undefined);
+});
+
+Deno.test("Select.handleKey navigates down when open", () => {
+  const sel = Select({ options: ["A", "B", "C"], selected: 0, open: true });
+  assertEquals(sel.handleKey(key("Down")), { selected: 1, open: true });
+});
+
+Deno.test("Select.handleKey navigates up when open", () => {
+  const sel = Select({ options: ["A", "B", "C"], selected: 2, open: true });
+  assertEquals(sel.handleKey(key("Up")), { selected: 1, open: true });
+});
+
+Deno.test("Select.handleKey clamps at boundaries", () => {
+  const sel = Select({ options: ["A", "B", "C"], selected: 0, open: true });
+  assertEquals(sel.handleKey(key("Up")), { selected: 0, open: true });
+  const sel2 = Select({ options: ["A", "B", "C"], selected: 2, open: true });
+  assertEquals(sel2.handleKey(key("Down")), { selected: 2, open: true });
+});
+
+Deno.test("Select.handleKey confirms with Enter", () => {
+  const sel = Select({ options: ["A", "B", "C"], selected: 1, open: true });
+  assertEquals(sel.handleKey(key("Enter")), { selected: 1, open: false });
+});
+
+Deno.test("Select.handleKey closes with Escape", () => {
+  const sel = Select({ options: ["A", "B", "C"], selected: 1, open: true });
+  assertEquals(sel.handleKey(key("Escape")), { selected: 1, open: false });
+});
+
+// List.handleKey
+
+Deno.test("List.handleKey navigates down", () => {
+  const list = List({ items: ["A", "B", "C"], selected: 0 });
+  assertEquals(list.handleKey(key("Down")), { selected: 1 });
+});
+
+Deno.test("List.handleKey navigates up", () => {
+  const list = List({ items: ["A", "B", "C"], selected: 2 });
+  assertEquals(list.handleKey(key("Up")), { selected: 1 });
+});
+
+Deno.test("List.handleKey Home goes to first", () => {
+  const list = List({ items: ["A", "B", "C"], selected: 2 });
+  assertEquals(list.handleKey(key("Home")), { selected: 0 });
+});
+
+Deno.test("List.handleKey End goes to last", () => {
+  const list = List({ items: ["A", "B", "C"], selected: 0 });
+  assertEquals(list.handleKey(key("End")), { selected: 2 });
+});
+
+Deno.test("List.handleKey clamps at boundaries", () => {
+  const list = List({ items: ["A", "B", "C"], selected: 0 });
+  assertEquals(list.handleKey(key("Up")), { selected: 0 });
+  const list2 = List({ items: ["A", "B", "C"], selected: 2 });
+  assertEquals(list2.handleKey(key("Down")), { selected: 2 });
+});
+
+Deno.test("List.handleKey bubbles other keys", () => {
+  const list = List({ items: ["A", "B"], selected: 0 });
+  assertEquals(list.handleKey(key("Enter")), undefined);
+  assertEquals(list.handleKey(key("a")), undefined);
+});
+
+// Tabs.handleKey
+
+Deno.test("Tabs.handleKey switches right", () => {
+  const tabs = Tabs({
+    tabs: [
+      { id: "a", label: "A", content: Text("A") },
+      { id: "b", label: "B", content: Text("B") },
+    ],
+    activeTab: "a",
+  });
+  assertEquals(tabs.handleKey(key("Right")), { activeTab: "b" });
+});
+
+Deno.test("Tabs.handleKey switches left", () => {
+  const tabs = Tabs({
+    tabs: [
+      { id: "a", label: "A", content: Text("A") },
+      { id: "b", label: "B", content: Text("B") },
+    ],
+    activeTab: "b",
+  });
+  assertEquals(tabs.handleKey(key("Left")), { activeTab: "a" });
+});
+
+Deno.test("Tabs.handleKey clamps at boundaries", () => {
+  const tabs = Tabs({
+    tabs: [
+      { id: "a", label: "A", content: Text("A") },
+      { id: "b", label: "B", content: Text("B") },
+    ],
+    activeTab: "a",
+  });
+  assertEquals(tabs.handleKey(key("Left")), undefined);
+  const tabs2 = Tabs({
+    tabs: [
+      { id: "a", label: "A", content: Text("A") },
+      { id: "b", label: "B", content: Text("B") },
+    ],
+    activeTab: "b",
+  });
+  assertEquals(tabs2.handleKey(key("Right")), undefined);
+});
+
+Deno.test("Tabs.handleKey bubbles other keys", () => {
+  const tabs = Tabs({
+    tabs: [{ id: "a", label: "A", content: Text("A") }],
+    activeTab: "a",
+  });
+  assertEquals(tabs.handleKey(key("Enter")), undefined);
+});
+
+// Tree.handleKey
+
+Deno.test("Tree.handleKey navigates down", () => {
+  const tree = Tree({
+    nodes: [{ label: "A" }, { label: "B" }, { label: "C" }],
+    selected: "A",
+  });
+  assertEquals(tree.handleKey(key("Down")), { selected: "B" });
+});
+
+Deno.test("Tree.handleKey navigates up", () => {
+  const tree = Tree({
+    nodes: [{ label: "A" }, { label: "B" }, { label: "C" }],
+    selected: "B",
+  });
+  assertEquals(tree.handleKey(key("Up")), { selected: "A" });
+});
+
+Deno.test("Tree.handleKey expands with Right", () => {
+  const tree = Tree({
+    nodes: [{
+      label: "Parent",
+      expanded: false,
+      children: [{ label: "Child" }],
+    }],
+    selected: "Parent",
+  });
+  const result = tree.handleKey(key("Right"));
+  assertEquals(result, { selected: "Parent", toggled: "Parent" });
+});
+
+Deno.test("Tree.handleKey collapses with Left", () => {
+  const tree = Tree({
+    nodes: [{
+      label: "Parent",
+      expanded: true,
+      children: [{ label: "Child" }],
+    }],
+    selected: "Parent",
+  });
+  const result = tree.handleKey(key("Left"));
+  assertEquals(result, { selected: "Parent", toggled: "Parent" });
+});
+
+Deno.test("Tree.handleKey Left on child goes to parent", () => {
+  const tree = Tree({
+    nodes: [{
+      label: "Parent",
+      expanded: true,
+      children: [{ label: "Child" }],
+    }],
+    selected: "Child",
+  });
+  const result = tree.handleKey(key("Left"));
+  assertEquals(result, { selected: "Parent" });
+});
+
+Deno.test("Tree.handleKey navigates into expanded children", () => {
+  const tree = Tree({
+    nodes: [{
+      label: "Parent",
+      expanded: true,
+      children: [{ label: "Child" }],
+    }],
+    selected: "Parent",
+  });
+  assertEquals(tree.handleKey(key("Down")), { selected: "Child" });
+});
+
+Deno.test("Tree.handleKey bubbles other keys", () => {
+  const tree = Tree({
+    nodes: [{ label: "A" }],
+    selected: "A",
+  });
+  assertEquals(tree.handleKey(key("Tab")), undefined);
+});
+
+// ============================================================
+// handleFocusGroup tests
+// ============================================================
+
+Deno.test("handleFocusGroup Tab cycles focus forward", () => {
+  const input1 = TextInput({ value: "", cursorPos: 0 });
+  const input2 = TextInput({ value: "", cursorPos: 0 });
+  const result = handleFocusGroup(
+    {
+      items: [
+        { id: "a", input: input1, apply: (s) => s },
+        { id: "b", input: input2, apply: (s) => s },
+      ],
+      focusedId: "a",
+    },
+    key("Tab"),
+    {},
+  );
+  assertEquals(result.focusedId, "b");
+  assertEquals(result.handled, true);
+});
+
+Deno.test("handleFocusGroup Shift+Tab cycles focus backward", () => {
+  const input1 = TextInput({ value: "", cursorPos: 0 });
+  const input2 = TextInput({ value: "", cursorPos: 0 });
+  const result = handleFocusGroup(
+    {
+      items: [
+        { id: "a", input: input1, apply: (s) => s },
+        { id: "b", input: input2, apply: (s) => s },
+      ],
+      focusedId: "b",
+    },
+    key("Tab", { shift: true }),
+    {},
+  );
+  assertEquals(result.focusedId, "a");
+  assertEquals(result.handled, true);
+});
+
+Deno.test("handleFocusGroup Tab wraps around with cycle", () => {
+  const input1 = TextInput({ value: "", cursorPos: 0 });
+  const input2 = TextInput({ value: "", cursorPos: 0 });
+  const result = handleFocusGroup(
+    {
+      items: [
+        { id: "a", input: input1, apply: (s) => s },
+        { id: "b", input: input2, apply: (s) => s },
+      ],
+      focusedId: "b",
+      cycle: true,
+    },
+    key("Tab"),
+    {},
+  );
+  assertEquals(result.focusedId, "a");
+});
+
+Deno.test("handleFocusGroup Tab stays at end with cycle=false", () => {
+  const input1 = TextInput({ value: "", cursorPos: 0 });
+  const input2 = TextInput({ value: "", cursorPos: 0 });
+  const result = handleFocusGroup(
+    {
+      items: [
+        { id: "a", input: input1, apply: (s) => s },
+        { id: "b", input: input2, apply: (s) => s },
+      ],
+      focusedId: "b",
+      cycle: false,
+    },
+    key("Tab"),
+    {},
+  );
+  assertEquals(result.focusedId, "b");
+});
+
+Deno.test("handleFocusGroup routes key to focused item", () => {
+  interface S {
+    value: string;
+    cursorPos: number;
+  }
+  const input = TextInput({ value: "hello", cursorPos: 5 });
+  const result = handleFocusGroup<S>(
+    {
+      items: [
+        {
+          id: "field",
+          input: input,
+          apply: (_s, u) => u as S,
+        },
+      ],
+      focusedId: "field",
+    },
+    key("a"),
+    { value: "hello", cursorPos: 5 },
+  );
+  assertEquals(result.handled, true);
+  assertEquals(result.state, { value: "helloa", cursorPos: 6 });
+});
+
+Deno.test("handleFocusGroup bubbles unhandled events", () => {
+  const input = TextInput({ value: "", cursorPos: 0 });
+  const result = handleFocusGroup(
+    {
+      items: [
+        { id: "a", input: input, apply: (s) => s },
+      ],
+      focusedId: "a",
+    },
+    key("Escape"),
+    {},
+  );
+  assertEquals(result.handled, false);
+  assertEquals(result.state, undefined);
+});
+
+Deno.test("handleFocusGroup trap mode swallows unhandled events", () => {
+  const input = TextInput({ value: "", cursorPos: 0 });
+  const result = handleFocusGroup(
+    {
+      items: [
+        { id: "a", input: input, apply: (s) => s },
+      ],
+      focusedId: "a",
+      trap: true,
+    },
+    key("Escape"),
+    {},
+  );
+  assertEquals(result.handled, true);
+  assertEquals(result.state, undefined);
+});
+
+Deno.test("handleFocusGroup custom navigation keys", () => {
+  const input1 = TextInput({ value: "", cursorPos: 0 });
+  const input2 = TextInput({ value: "", cursorPos: 0 });
+  const result = handleFocusGroup(
+    {
+      items: [
+        { id: "a", input: input1, apply: (s) => s },
+        { id: "b", input: input2, apply: (s) => s },
+      ],
+      focusedId: "a",
+      navigationKeys: {
+        next: (e) => e.key === "Down",
+        prev: (e) => e.key === "Up",
+      },
+    },
+    key("Down"),
+    {},
+  );
+  assertEquals(result.focusedId, "b");
+  assertEquals(result.handled, true);
 });

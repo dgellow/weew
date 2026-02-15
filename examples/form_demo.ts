@@ -3,12 +3,14 @@ import {
   Box,
   colors,
   Column,
+  handleFocusGroup,
   Row,
   run,
   ScrollBox,
   Text,
   TextInput,
 } from "../mod.ts";
+import type { TextInputUpdate } from "../mod.ts";
 
 interface FormField {
   id: string;
@@ -19,7 +21,7 @@ interface FormField {
 
 interface State {
   fields: FormField[];
-  focusedIndex: number;
+  focusedId: string;
   scrollY: number;
   messages: string[];
 }
@@ -34,11 +36,11 @@ const initialFields: FormField[] = [
 await run<State>({
   initialState: {
     fields: initialFields,
-    focusedIndex: 0,
+    focusedId: "name",
     scrollY: 0,
     messages: [
       "Welcome to weew forms!",
-      "Use Tab/↑↓ to navigate",
+      "Use Tab/Shift+Tab to navigate",
       "Type to enter text",
       "Enter to submit",
       "Escape to clear",
@@ -57,43 +59,45 @@ await run<State>({
           title: " Registration Form ",
           padding: 1,
           child: Column(
-            state.fields.map((field, i) => ({
-              component: Column([
-                {
-                  component: Row([
-                    {
-                      component: Text({
-                        content: field.label + ":",
-                        style: {
-                          fg: i === state.focusedIndex
-                            ? colors.fg.cyan
-                            : colors.fg.white,
-                          bold: i === state.focusedIndex,
-                        },
-                      }),
-                      width: 12,
-                    },
-                    {
-                      flex: 1,
-                      component: Box({
-                        border: i === state.focusedIndex ? "single" : "none",
-                        borderColor: colors.fg.cyan,
-                        child: TextInput({
-                          value: field.id === "password"
-                            ? "•".repeat(field.value.length)
-                            : field.value,
-                          cursorPos: field.cursorPos,
-                          placeholder: `Enter ${field.label.toLowerCase()}...`,
-                          focused: i === state.focusedIndex,
-                          style: { fg: colors.fg.white },
+            state.fields.map((field) => {
+              const isFocused = field.id === state.focusedId;
+              return {
+                component: Column([
+                  {
+                    component: Row([
+                      {
+                        component: Text({
+                          content: field.label + ":",
+                          style: {
+                            fg: isFocused ? colors.fg.cyan : colors.fg.white,
+                            bold: isFocused,
+                          },
                         }),
-                      }),
-                    },
-                  ]),
-                },
-                { component: Text(""), height: 1 },
-              ]),
-            })),
+                        width: 12,
+                      },
+                      {
+                        flex: 1,
+                        component: Box({
+                          border: isFocused ? "single" : "none",
+                          borderColor: colors.fg.cyan,
+                          child: TextInput({
+                            value: field.id === "password"
+                              ? "\u2022".repeat(field.value.length)
+                              : field.value,
+                            cursorPos: field.cursorPos,
+                            placeholder:
+                              `Enter ${field.label.toLowerCase()}...`,
+                            focused: isFocused,
+                            style: { fg: colors.fg.white },
+                          }),
+                        }),
+                      },
+                    ]),
+                  },
+                  { component: Text(""), height: 1 },
+                ]),
+              };
+            }),
           ),
         }),
       },
@@ -127,24 +131,6 @@ await run<State>({
     ]),
 
   onKey: (event, state, ctx) => {
-    const field = state.fields[state.focusedIndex];
-
-    // Navigation
-    if (event.key === "Tab" || event.key === "Down") {
-      return {
-        ...state,
-        focusedIndex: (state.focusedIndex + 1) % state.fields.length,
-      };
-    }
-
-    if (event.key === "Up" || (event.key === "Tab" && event.shift)) {
-      return {
-        ...state,
-        focusedIndex: (state.focusedIndex - 1 + state.fields.length) %
-          state.fields.length,
-      };
-    }
-
     // Quit
     if (event.key === "q" && event.ctrl) {
       ctx.exit();
@@ -171,63 +157,42 @@ await run<State>({
     if (event.key === "Escape") {
       return {
         ...state,
-        fields: state.fields.map((f, i) =>
-          i === state.focusedIndex ? { ...f, value: "", cursorPos: 0 } : f
+        fields: state.fields.map((f) =>
+          f.id === state.focusedId ? { ...f, value: "", cursorPos: 0 } : f
         ),
       };
     }
 
-    // Text input
-    if (event.key === "Backspace") {
-      if (field.cursorPos > 0) {
-        const newValue = field.value.slice(0, field.cursorPos - 1) +
-          field.value.slice(field.cursorPos);
-        return {
-          ...state,
-          fields: state.fields.map((f, i) =>
-            i === state.focusedIndex
-              ? { ...f, value: newValue, cursorPos: field.cursorPos - 1 }
-              : f
-          ),
-        };
-      }
-      return state;
-    }
-
-    if (event.key === "Left") {
+    // Focus group handles Tab navigation + text input
+    const result = handleFocusGroup(
+      {
+        items: state.fields.map((field) => ({
+          id: field.id,
+          input: TextInput({
+            value: field.value,
+            cursorPos: field.cursorPos,
+          }),
+          apply: (s: State, update: unknown) => {
+            const u = update as TextInputUpdate;
+            return {
+              ...s,
+              fields: s.fields.map((f) =>
+                f.id === field.id
+                  ? { ...f, value: u.value, cursorPos: u.cursorPos }
+                  : f
+              ),
+            };
+          },
+        })),
+        focusedId: state.focusedId,
+      },
+      event,
+      state,
+    );
+    if (result.handled) {
       return {
-        ...state,
-        fields: state.fields.map((f, i) =>
-          i === state.focusedIndex
-            ? { ...f, cursorPos: Math.max(0, f.cursorPos - 1) }
-            : f
-        ),
-      };
-    }
-
-    if (event.key === "Right") {
-      return {
-        ...state,
-        fields: state.fields.map((f, i) =>
-          i === state.focusedIndex
-            ? { ...f, cursorPos: Math.min(f.value.length, f.cursorPos + 1) }
-            : f
-        ),
-      };
-    }
-
-    // Type character
-    if (event.key.length === 1 && !event.ctrl && !event.alt) {
-      const newValue = field.value.slice(0, field.cursorPos) +
-        event.key +
-        field.value.slice(field.cursorPos);
-      return {
-        ...state,
-        fields: state.fields.map((f, i) =>
-          i === state.focusedIndex
-            ? { ...f, value: newValue, cursorPos: field.cursorPos + 1 }
-            : f
-        ),
+        ...(result.state ?? state),
+        focusedId: result.focusedId,
       };
     }
 

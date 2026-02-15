@@ -53,8 +53,12 @@ export function parseKeyEvent(bytes: Uint8Array): KeyEvent {
   if (bytes.length === 1) {
     const byte = bytes[0];
 
-    // Ctrl+letter (0x01-0x1A)
-    if (byte >= 0x01 && byte <= 0x1a) {
+    // Ctrl+letter (0x01-0x1A), excluding Tab (0x09), LF (0x0a), CR (0x0d)
+    // which have dedicated handling in the switch below
+    if (
+      byte >= 0x01 && byte <= 0x1a &&
+      byte !== 0x09 && byte !== 0x0a && byte !== 0x0d
+    ) {
       ctrl = true;
       key = String.fromCharCode(byte + 0x60); // Convert to lowercase letter
       return { key, ctrl, alt, shift, meta, raw };

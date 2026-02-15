@@ -152,6 +152,26 @@ export const screen: ScreenCommands = {
   main: `${CSI}?1049l`,
 };
 
+// OSC (Operating System Command) sequences
+export interface OscCommands {
+  setTitle: (title: string) => string;
+  hyperlink: (url: string, text: string) => string;
+  bell: string;
+  notify: (message: string) => string;
+}
+
+export const osc: OscCommands = {
+  /** Set terminal title (OSC 0) — readable by screen readers */
+  setTitle: (title: string): string => `\x1b]0;${title}\x07`,
+  /** Create clickable hyperlink (OSC 8) — supported by modern terminals */
+  hyperlink: (url: string, text: string): string =>
+    `\x1b]8;;${url}\x1b\\${text}\x1b]8;;\x1b\\`,
+  /** Bell character — universally supported, screen-reader-friendly */
+  bell: "\x07",
+  /** Desktop notification (OSC 9) */
+  notify: (message: string): string => `\x1b]9;${message}\x07`,
+};
+
 // Strip ANSI codes from string
 // deno-lint-ignore no-control-regex
 const ANSI_REGEX = /\x1b(?:\[[0-9;?]*[a-zA-Z~]|\].*?(?:\x07|\x1b\\)|\([A-Z])/g;
@@ -163,11 +183,11 @@ export function stripAnsi(str: string): string {
 /**
  * Get the display width of a character.
  * Returns 2 for wide characters (CJK, emoji), 0 for combining marks, 1 otherwise.
+ * Uses a precomputed lookup table for BMP codepoints (< 0x10000) for speed.
  */
-export function charWidth(char: string): number {
-  const code = char.codePointAt(0);
-  if (code === undefined) return 0;
 
+// Slow path: range checks for computing width (used to build table + supplementary planes)
+function computeWidth(code: number): number {
   // Combining marks and zero-width characters
   if (
     (code >= 0x0300 && code <= 0x036f) || // Combining Diacritical Marks
@@ -194,7 +214,17 @@ export function charWidth(char: string): number {
     (code >= 0xfe10 && code <= 0xfe1f) || // Vertical forms
     (code >= 0xfe30 && code <= 0xfe6f) || // CJK Compatibility Forms
     (code >= 0xff00 && code <= 0xff60) || // Fullwidth Forms
-    (code >= 0xffe0 && code <= 0xffe6) || // Fullwidth Forms
+    (code >= 0xffe0 && code <= 0xffe6) // Fullwidth Forms
+  ) {
+    return 2;
+  }
+
+  return 1;
+}
+
+// Supplementary plane range checks (codepoints >= 0x10000)
+function computeWidthSupplementary(code: number): number {
+  if (
     (code >= 0x20000 && code <= 0x2fffd) || // CJK Extension B+
     (code >= 0x30000 && code <= 0x3fffd) || // CJK Extension G+
     (code >= 0x1f300 && code <= 0x1f9ff) || // Misc Symbols and Pictographs, Emoticons, etc.
@@ -202,8 +232,20 @@ export function charWidth(char: string): number {
   ) {
     return 2;
   }
-
   return 1;
+}
+
+// Precomputed lookup table for BMP codepoints — one array lookup vs ~15 comparisons
+const CHAR_WIDTH_TABLE = new Uint8Array(0x10000);
+for (let cp = 0; cp < 0x10000; cp++) {
+  CHAR_WIDTH_TABLE[cp] = computeWidth(cp);
+}
+
+export function charWidth(char: string): number {
+  const code = char.codePointAt(0);
+  if (code === undefined) return 0;
+  if (code < 0x10000) return CHAR_WIDTH_TABLE[code];
+  return computeWidthSupplementary(code);
 }
 
 /**

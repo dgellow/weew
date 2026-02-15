@@ -141,22 +141,20 @@ Deno.test("parseKeyEvent: UTF-8 multibyte", () => {
   assertEquals(event.key, "é");
 });
 
-Deno.test("parseKeyEvent: Enter (0x0d is Ctrl+M)", () => {
-  // 0x0d falls in the Ctrl+letter range (0x01-0x1a)
+Deno.test("parseKeyEvent: Enter (0x0d)", () => {
   const event = parseKeyEvent(new Uint8Array([0x0d]));
-  assertEquals(event.key, "m");
-  assertEquals(event.ctrl, true);
+  assertEquals(event.key, Keys.Enter);
+  assertEquals(event.ctrl, false);
 });
 
 Deno.test("parseKeyEvent: Backspace", () => {
   assertEquals(parseKeyEvent(new Uint8Array([0x7f])).key, Keys.Backspace);
 });
 
-Deno.test("parseKeyEvent: Tab (0x09 is Ctrl+I)", () => {
-  // 0x09 falls in the Ctrl+letter range (0x01-0x1a)
+Deno.test("parseKeyEvent: Tab (0x09)", () => {
   const event = parseKeyEvent(new Uint8Array([0x09]));
-  assertEquals(event.key, "i");
-  assertEquals(event.ctrl, true);
+  assertEquals(event.key, Keys.Tab);
+  assertEquals(event.ctrl, false);
 });
 
 Deno.test("parseKeyEvent: uppercase detects shift", () => {

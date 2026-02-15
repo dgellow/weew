@@ -1,6 +1,6 @@
 // Terminal interaction utilities
 
-import { clear, cursor, screen } from "./ansi.ts";
+import { clear, cursor, osc, screen } from "./ansi.ts";
 
 export interface TerminalSize {
   columns: number;
@@ -96,4 +96,32 @@ export function onResize(callback: (size: TerminalSize) => void): () => void {
       // Ignore removal errors
     }
   };
+}
+
+// Set terminal title (readable by screen readers)
+export function setTitle(title: string): void {
+  write(osc.setTitle(title));
+}
+
+// Ring terminal bell (universally supported, screen-reader-friendly)
+export function bell(): void {
+  write(osc.bell);
+}
+
+// Check if NO_COLOR environment variable is set
+export function noColor(): boolean {
+  try {
+    return Deno.env.get("NO_COLOR") !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+// Check if reduced motion is preferred
+export function prefersReducedMotion(): boolean {
+  try {
+    return Deno.env.get("REDUCE_MOTION") !== undefined;
+  } catch {
+    return false;
+  }
 }
