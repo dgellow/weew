@@ -1548,3 +1548,356 @@ Deno.test("handleFocusGroup custom navigation keys", () => {
   assertEquals(result.focusedId, "b");
   assertEquals(result.handled, true);
 });
+
+// ============================================================
+// Additional List navigation tests (PageUp, PageDown, custom keys)
+// ============================================================
+
+Deno.test("List.handleKey PageUp navigates up by pageSize", () => {
+  const list = List({
+    items: Array.from({ length: 20 }, (_, i) => `${i}`),
+    selected: 15,
+  });
+  const result = list.handleKey(key("PageUp"));
+  // Default pageSize is 10
+  assertEquals(result, { selected: 5 });
+});
+
+Deno.test("List.handleKey PageDown navigates down by pageSize", () => {
+  const list = List({
+    items: Array.from({ length: 20 }, (_, i) => `${i}`),
+    selected: 5,
+  });
+  const result = list.handleKey(key("PageDown"));
+  assertEquals(result, { selected: 15 });
+});
+
+Deno.test("List.handleKey PageUp clamps at 0", () => {
+  const list = List({
+    items: Array.from({ length: 20 }, (_, i) => `${i}`),
+    selected: 3,
+  });
+  const result = list.handleKey(key("PageUp"));
+  assertEquals(result, { selected: 0 });
+});
+
+Deno.test("List.handleKey PageDown clamps at end", () => {
+  const list = List({
+    items: Array.from({ length: 20 }, (_, i) => `${i}`),
+    selected: 18,
+  });
+  const result = list.handleKey(key("PageDown"));
+  assertEquals(result, { selected: 19 });
+});
+
+Deno.test("List.handleKey with custom keys prop (j/k for down/up)", () => {
+  const list = List({
+    items: ["A", "B", "C"],
+    selected: 0,
+    keys: { down: ["j"], up: ["k"] },
+  });
+  const down = list.handleKey(key("j"));
+  assertEquals(down, { selected: 1 });
+
+  const list2 = List({
+    items: ["A", "B", "C"],
+    selected: 2,
+    keys: { down: ["j"], up: ["k"] },
+  });
+  const up = list2.handleKey(key("k"));
+  assertEquals(up, { selected: 1 });
+});
+
+Deno.test("List.handleKey with custom keys and Ctrl modifier", () => {
+  const list = List({
+    items: Array.from({ length: 20 }, (_, i) => `${i}`),
+    selected: 5,
+    keys: { pageDown: ["Ctrl+d"], pageUp: ["Ctrl+u"] },
+  });
+  const result = list.handleKey(key("d", { ctrl: true }));
+  assertEquals(result, { selected: 15 });
+});
+
+Deno.test("List with custom pageSize", () => {
+  const list = List({
+    items: Array.from({ length: 20 }, (_, i) => `${i}`),
+    selected: 10,
+    pageSize: 5,
+  });
+  const up = list.handleKey(key("PageUp"));
+  assertEquals(up, { selected: 5 });
+  const list2 = List({
+    items: Array.from({ length: 20 }, (_, i) => `${i}`),
+    selected: 10,
+    pageSize: 5,
+  });
+  const down = list2.handleKey(key("PageDown"));
+  assertEquals(down, { selected: 15 });
+});
+
+// ============================================================
+// VirtualList.handleKey tests
+// ============================================================
+
+Deno.test("VirtualList.handleKey navigates down", () => {
+  const items = Array.from({ length: 10 }, (_, i) => `Item ${i}`);
+  const vlist = VirtualList({
+    items,
+    selected: 0,
+    scrollY: 0,
+    renderItem: (item: string) => Text(item),
+  });
+  // Render first to set lastViewportHeight
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("Down"));
+  assertEquals(result?.selected, 1);
+  assertEquals(typeof result?.scrollY, "number");
+});
+
+Deno.test("VirtualList.handleKey navigates up", () => {
+  const items = Array.from({ length: 10 }, (_, i) => `Item ${i}`);
+  const vlist = VirtualList({
+    items,
+    selected: 5,
+    scrollY: 0,
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("Up"));
+  assertEquals(result?.selected, 4);
+});
+
+Deno.test("VirtualList.handleKey Home goes to first item", () => {
+  const items = Array.from({ length: 10 }, (_, i) => `Item ${i}`);
+  const vlist = VirtualList({
+    items,
+    selected: 7,
+    scrollY: 3,
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("Home"));
+  assertEquals(result?.selected, 0);
+  assertEquals(result?.scrollY, 0);
+});
+
+Deno.test("VirtualList.handleKey End goes to last item", () => {
+  const items = Array.from({ length: 10 }, (_, i) => `Item ${i}`);
+  const vlist = VirtualList({
+    items,
+    selected: 0,
+    scrollY: 0,
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("End"));
+  assertEquals(result?.selected, 9);
+});
+
+Deno.test("VirtualList.handleKey PageUp", () => {
+  const items = Array.from({ length: 20 }, (_, i) => `Item ${i}`);
+  const vlist = VirtualList({
+    items,
+    selected: 15,
+    scrollY: 10,
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("PageUp"));
+  assertEquals(result!.selected < 15, true);
+});
+
+Deno.test("VirtualList.handleKey PageDown", () => {
+  const items = Array.from({ length: 20 }, (_, i) => `Item ${i}`);
+  const vlist = VirtualList({
+    items,
+    selected: 5,
+    scrollY: 0,
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("PageDown"));
+  assertEquals(result!.selected > 5, true);
+});
+
+Deno.test("VirtualList.handleKey with custom keys", () => {
+  const items = Array.from({ length: 10 }, (_, i) => `Item ${i}`);
+  const vlist = VirtualList({
+    items,
+    selected: 0,
+    scrollY: 0,
+    keys: { down: ["j"], up: ["k"] },
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("j"));
+  assertEquals(result?.selected, 1);
+});
+
+Deno.test("VirtualList keeps selected in view when scrolling down", () => {
+  const items = Array.from({ length: 20 }, (_, i) => `Item ${i}`);
+  // selected=4, scrollY=0, viewport height ~5 (7 - 2 borders)
+  const vlist = VirtualList({
+    items,
+    selected: 4,
+    scrollY: 0,
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  // Move down past viewport
+  const result = vlist.handleKey(key("Down"));
+  // scrollY should adjust to keep selected=5 visible
+  assertEquals(result?.selected, 5);
+  assertEquals(result!.scrollY >= 1, true);
+});
+
+Deno.test("VirtualList keeps selected in view when scrolling up", () => {
+  const items = Array.from({ length: 20 }, (_, i) => `Item ${i}`);
+  const vlist = VirtualList({
+    items,
+    selected: 5,
+    scrollY: 5,
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("Up"));
+  assertEquals(result?.selected, 4);
+  // scrollY should adjust to keep selected=4 visible
+  assertEquals(result!.scrollY <= 4, true);
+});
+
+Deno.test("VirtualList.handleKey bubbles unhandled keys", () => {
+  const items = ["A", "B", "C"];
+  const vlist = VirtualList({
+    items,
+    selected: 0,
+    scrollY: 0,
+    renderItem: (item: string) => Text(item),
+  });
+  const canvas = new Canvas(20, 7);
+  vlist.render(canvas, { x: 0, y: 0, width: 20, height: 7 });
+
+  const result = vlist.handleKey(key("Enter"));
+  assertEquals(result, undefined);
+});
+
+// ============================================================
+// Additional component tests
+// ============================================================
+
+Deno.test("Text with wrap:true and newlines", () => {
+  const canvas = new Canvas(20, 5);
+  const text = Text({ content: "Line1\nLine2\nLine3", wrap: true });
+  text.render(canvas, { x: 0, y: 0, width: 20, height: 5 });
+
+  assertEquals(canvas.get(0, 0)?.char, "L");
+  assertEquals(canvas.get(4, 0)?.char, "1");
+  assertEquals(canvas.get(0, 1)?.char, "L");
+  assertEquals(canvas.get(4, 1)?.char, "2");
+  assertEquals(canvas.get(0, 2)?.char, "L");
+  assertEquals(canvas.get(4, 2)?.char, "3");
+});
+
+Deno.test("Box with border:none has no border chars", () => {
+  const canvas = new Canvas(10, 5);
+  const box = Box({ border: "none", child: Text("Hi") });
+  box.render(canvas, { x: 0, y: 0, width: 10, height: 5 });
+
+  // No border corners
+  assertEquals(canvas.get(0, 0)?.char, "H");
+  assertEquals(canvas.get(1, 0)?.char, "i");
+});
+
+Deno.test("Box with border:double uses correct double chars", () => {
+  const canvas = new Canvas(10, 5);
+  const box = Box({ border: "double" });
+  box.render(canvas, { x: 0, y: 0, width: 10, height: 5 });
+
+  assertEquals(canvas.get(0, 0)?.char, "╔");
+  assertEquals(canvas.get(9, 0)?.char, "╗");
+  assertEquals(canvas.get(0, 4)?.char, "╚");
+  assertEquals(canvas.get(9, 4)?.char, "╝");
+  assertEquals(canvas.get(1, 0)?.char, "═");
+  assertEquals(canvas.get(0, 1)?.char, "║");
+});
+
+Deno.test("Progress with showPercent:true renders percentage", () => {
+  const canvas = new Canvas(30, 1);
+  const progress = Progress({ value: 75, width: 10, showPercent: true });
+  progress.render(canvas, { x: 0, y: 0, width: 30, height: 1 });
+
+  // Percent text after the bar: " 75%" at position width+1
+  assertEquals(canvas.get(12, 0)?.char, "7");
+  assertEquals(canvas.get(13, 0)?.char, "5");
+  assertEquals(canvas.get(14, 0)?.char, "%");
+});
+
+Deno.test("Spinner without label renders only frame char", () => {
+  const canvas = new Canvas(10, 1);
+  const spinner = Spinner({ frame: 0 });
+  spinner.render(canvas, { x: 0, y: 0, width: 10, height: 1 });
+
+  assertEquals(canvas.get(0, 0)?.char, "⠋");
+  // No label text after spinner
+  assertEquals(canvas.get(2, 0)?.char, " ");
+});
+
+Deno.test("Select maxVisible limits dropdown options shown", () => {
+  const canvas = new Canvas(20, 10);
+  const select = Select({
+    options: ["A", "B", "C", "D", "E"],
+    selected: 0,
+    open: true,
+    maxVisible: 2,
+  });
+  select.render(canvas, { x: 0, y: 0, width: 20, height: 10 });
+
+  // First 2 options visible
+  assertEquals(canvas.get(2, 1)?.char, "A");
+  assertEquals(canvas.get(2, 2)?.char, "B");
+  // Third option should NOT be rendered
+  assertEquals(canvas.get(2, 3)?.char, " ");
+});
+
+Deno.test("Toast custom width", () => {
+  const canvas = new Canvas(30, 3);
+  const toast = Toast({ message: "Hi", width: 20 });
+  toast.render(canvas, { x: 0, y: 0, width: 30, height: 3 });
+
+  // Toast centered: x = (30-20)/2 = 5
+  // The toast fills 20 cells starting at x=5
+  // "Hi" centered within 20: textX = 5 + (20-2)/2 = 14
+  assertEquals(canvas.get(14, 0)?.char, "H");
+  assertEquals(canvas.get(15, 0)?.char, "i");
+});
+
+Deno.test("Table without headers renders rows directly", () => {
+  const canvas = new Canvas(40, 5);
+  const table = Table({
+    rows: [["Alice", "30"], ["Bob", "25"]],
+    border: false,
+  });
+  table.render(canvas, { x: 0, y: 0, width: 40, height: 5 });
+
+  // First row starts at y=0 (no headers)
+  assertEquals(canvas.get(0, 0)?.char, "A");
+  assertEquals(canvas.get(0, 1)?.char, "B");
+});

@@ -3,17 +3,26 @@
 
 import { Canvas } from "./canvas.ts";
 import {
+  Badge,
   Box,
+  Checkbox,
   List,
+  Progress,
   ScrollBox,
+  Select,
   Table,
+  Tabs,
   Text,
+  TextInput,
+  Tree,
   VirtualList,
   VirtualScrollBox,
 } from "./components.ts";
 import { Column, Flex, Row } from "./layout.ts";
 import { charWidth, stripAnsi, visibleLength } from "./ansi.ts";
 import type { Rect, VisibleRange } from "./components.ts";
+import { isKey, parseKeyEvent } from "./input.ts";
+import { handleFocusGroup } from "./focus.ts";
 
 // ============================================================
 // Canvas core operations
@@ -431,4 +440,224 @@ Deno.bench("Stress: visibleLength on 1000 strings", () => {
   for (const s of strings) {
     visibleLength(s);
   }
+});
+
+// ============================================================
+// Canvas output path
+// ============================================================
+
+Deno.bench("Canvas.toAnsi — 80x24 with styles", () => {
+  const canvas = new Canvas(80, 24);
+  for (let y = 0; y < 24; y++) {
+    canvas.text(0, y, "styled text here!", {
+      fg: "\x1b[31m",
+      bg: "\x1b[42m",
+      style: "\x1b[1m",
+    });
+  }
+  canvas.toAnsi();
+});
+
+Deno.bench("Canvas.toAnsi — 200x50 with styles", () => {
+  const canvas = new Canvas(200, 50);
+  for (let y = 0; y < 50; y++) {
+    canvas.text(0, y, "styled text here!".repeat(5), {
+      fg: "\x1b[31m",
+      bg: "\x1b[42m",
+      style: "\x1b[1m",
+    });
+  }
+  canvas.toAnsi();
+});
+
+// ============================================================
+// Input parsing
+// ============================================================
+
+Deno.bench("parseKeyEvent — single ASCII byte", () => {
+  parseKeyEvent(new Uint8Array([0x61])); // 'a'
+});
+
+Deno.bench("parseKeyEvent — arrow key (3-byte CSI)", () => {
+  parseKeyEvent(new Uint8Array([0x1b, 0x5b, 0x41])); // Up
+});
+
+Deno.bench("parseKeyEvent — modified key (CSI with modifier)", () => {
+  parseKeyEvent(new Uint8Array([0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x43])); // Ctrl+Right "1;5C"
+});
+
+Deno.bench("parseKeyEvent — UTF-8 multibyte (CJK char)", () => {
+  parseKeyEvent(new Uint8Array([0xe4, 0xbd, 0xa0])); // 你
+});
+
+Deno.bench("isKey — simple match", () => {
+  const event = {
+    key: "q",
+    ctrl: false,
+    alt: false,
+    shift: false,
+    meta: false,
+    raw: new Uint8Array(),
+  };
+  isKey(event, "q");
+});
+
+Deno.bench("isKey — with modifiers", () => {
+  const event = {
+    key: "s",
+    ctrl: true,
+    alt: false,
+    shift: true,
+    meta: false,
+    raw: new Uint8Array(),
+  };
+  isKey(event, "s", { ctrl: true, shift: true });
+});
+
+// ============================================================
+// Focus routing
+// ============================================================
+
+Deno.bench("handleFocusGroup — Tab navigation (5 items)", () => {
+  const items = Array.from({ length: 5 }, (_, i) => ({
+    id: `item-${i}`,
+    input: TextInput({ value: "", cursorPos: 0 }),
+    apply: (s: number) => s,
+  }));
+  const event = {
+    key: "Tab",
+    ctrl: false,
+    alt: false,
+    shift: false,
+    meta: false,
+    raw: new Uint8Array(),
+  };
+  handleFocusGroup({ items, focusedId: "item-2" }, event, 0);
+});
+
+Deno.bench("handleFocusGroup — key routing to focused TextInput", () => {
+  const items = [{
+    id: "field",
+    input: TextInput({ value: "hello world", cursorPos: 5 }),
+    apply: (_s: string, u: unknown) => (u as { value: string }).value,
+  }];
+  const event = {
+    key: "a",
+    ctrl: false,
+    alt: false,
+    shift: false,
+    meta: false,
+    raw: new Uint8Array(),
+  };
+  handleFocusGroup({ items, focusedId: "field" }, event, "hello world");
+});
+
+// ============================================================
+// More components
+// ============================================================
+
+Deno.bench("TextInput — render with cursor and 50-char value", () => {
+  const canvas = new Canvas(80, 1);
+  const input = TextInput({
+    value: "a".repeat(50),
+    cursorPos: 25,
+    focused: true,
+  });
+  input.render(canvas, { x: 0, y: 0, width: 80, height: 1 });
+});
+
+Deno.bench("Checkbox — render checked", () => {
+  const canvas = new Canvas(30, 1);
+  const cb = Checkbox({ checked: true, label: "Accept terms and conditions" });
+  cb.render(canvas, { x: 0, y: 0, width: 30, height: 1 });
+});
+
+Deno.bench("Select — render open with 50 options", () => {
+  const canvas = new Canvas(40, 60);
+  const options = Array.from({ length: 50 }, (_, i) => `Option ${i}`);
+  const sel = Select({ options, selected: 25, open: true });
+  sel.render(canvas, { x: 0, y: 0, width: 40, height: 60 });
+});
+
+Deno.bench("Tree — 3 levels, 50 nodes expanded", () => {
+  const canvas = new Canvas(80, 60);
+  const children = Array.from({ length: 10 }, (_, i) => ({
+    label: `Child ${i}`,
+    expanded: true,
+    children: Array.from(
+      { length: 4 },
+      (_, j) => ({ label: `Leaf ${i}-${j}` }),
+    ),
+  }));
+  const nodes = [{ label: "Root", expanded: true, children }];
+  const tree = Tree({ nodes, selected: "Child 5" });
+  tree.render(canvas, { x: 0, y: 0, width: 80, height: 60 });
+});
+
+Deno.bench("Tabs — render 5 tabs with active content", () => {
+  const canvas = new Canvas(80, 24);
+  const tabs = Tabs({
+    tabs: Array.from({ length: 5 }, (_, i) => ({
+      id: `tab-${i}`,
+      label: `Tab ${i}`,
+      content: Text(`Content for tab ${i}`),
+    })),
+    activeTab: "tab-2",
+  });
+  tabs.render(canvas, { x: 0, y: 0, width: 80, height: 24 });
+});
+
+// ============================================================
+// Real-world scenario
+// ============================================================
+
+Deno.bench("Dashboard: sidebar + header + table + status bar", () => {
+  const canvas = new Canvas(120, 40);
+  const layout = Row([
+    {
+      component: Box({
+        border: "single",
+        title: "Navigation",
+        child: List({
+          items: ["Dashboard", "Users", "Settings", "Reports", "Analytics"],
+          selected: 0,
+        }),
+      }),
+      width: 25,
+    },
+    {
+      component: Column([
+        {
+          component: Box({
+            border: "single",
+            title: "System Status",
+            child: Row([
+              { component: Text("CPU: "), width: 5 },
+              { component: Progress({ value: 73, width: 20 }), width: 20 },
+              { component: Text("  RAM: "), width: 7 },
+              { component: Progress({ value: 45, width: 20 }), width: 20 },
+              { component: Badge({ text: "OK" }), width: 6 },
+            ]),
+          }),
+          height: 5,
+        },
+        {
+          component: Box({
+            border: "single",
+            title: "Recent Activity",
+            child: Table({
+              headers: ["Time", "User", "Action", "Status"],
+              rows: Array.from({ length: 20 }, (_, i) => [
+                `12:${String(i).padStart(2, "0")}`,
+                `user_${i}`,
+                i % 3 === 0 ? "login" : i % 3 === 1 ? "upload" : "download",
+                i % 4 === 0 ? "error" : "success",
+              ]),
+            }),
+          }),
+        },
+      ]),
+    },
+  ]);
+  layout.render(canvas, { x: 0, y: 0, width: 120, height: 40 });
 });

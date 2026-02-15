@@ -1,4 +1,4 @@
-// App - the main application runner with state management
+/** App — the main application runner with state management, rendering loop, and keyboard input. */
 
 import { Canvas } from "./canvas.ts";
 import type { Component, Rect } from "./components.ts";
@@ -17,6 +17,7 @@ import {
 } from "./terminal.ts";
 import { cursor } from "./ansi.ts";
 
+/** Configuration for creating an App. Generic over state type S. */
 export interface AppConfig<S> {
   /** Initial state */
   initialState: S;
@@ -48,11 +49,13 @@ export interface AppConfig<S> {
   ) => S | undefined | void;
 }
 
+/** Context passed to the render function with current terminal dimensions. */
 export interface RenderContext {
   width: number;
   height: number;
 }
 
+/** Context available to event handlers for controlling app state and lifecycle. */
 export interface AppContext<S> {
   /** Request a re-render */
   render: () => void;
@@ -64,6 +67,10 @@ export interface AppContext<S> {
   size: () => TerminalSize;
 }
 
+/**
+ * Main application class. Manages the terminal lifecycle (alt screen, raw mode, cursor),
+ * runs a tick loop for animations, and reads keyboard input.
+ */
 export class App<S> {
   private state: S;
   private canvas: Canvas;
@@ -269,13 +276,13 @@ export class App<S> {
   }
 }
 
-/** Convenient run function */
+/** Create and run an App with the given config. Convenience wrapper around `new App(config).run()`. */
 export function run<S>(config: AppConfig<S>): Promise<void> {
   const app = new App(config);
   return app.run();
 }
 
-/** Simple static render (no interactivity, just render once) */
+/** Render a component once to the terminal without any interactivity or event loop. */
 export function renderOnce(component: Component): void {
   const size = getSize();
   const canvas = new Canvas(size.columns, size.rows);

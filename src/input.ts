@@ -1,5 +1,6 @@
-// Input handling - keyboard and mouse events
+/** Input handling — keyboard event parsing from raw terminal bytes. */
 
+/** A parsed keyboard event with key name and modifier flags. */
 export interface KeyEvent {
   key: string;
   ctrl: boolean;
@@ -9,7 +10,7 @@ export interface KeyEvent {
   raw: Uint8Array;
 }
 
-// Special key codes
+/** Named constants for special keys, matching the key names returned by parseKeyEvent. */
 export const Keys = {
   Enter: "Enter",
   Escape: "Escape",
@@ -40,7 +41,12 @@ export const Keys = {
   F12: "F12",
 } as const;
 
-// Parse raw bytes into key event
+/**
+ * Parse raw terminal bytes into a KeyEvent.
+ * Handles single-byte keys, CSI/SS3 escape sequences, modified keys, Alt+key, and UTF-8 multibyte characters.
+ * @param bytes - Raw bytes read from stdin
+ * @returns A parsed KeyEvent with key name and modifier flags
+ */
 export function parseKeyEvent(bytes: Uint8Array): KeyEvent {
   const raw = bytes;
   let key = "";
@@ -203,13 +209,17 @@ export function parseKeyEvent(bytes: Uint8Array): KeyEvent {
   return { key, ctrl, alt, shift, meta, raw };
 }
 
-// Keyboard input reader
+/**
+ * Keyboard input reader that runs an async read loop on stdin.
+ * Handles ESC disambiguation with a 50ms timeout to distinguish lone Escape from escape sequences.
+ */
 export class KeyboardInput {
   private running = false;
   private handlers: ((event: KeyEvent) => void)[] = [];
   private pendingRead: Promise<number | null> | null = null;
   private readBuffer = new Uint8Array(16);
 
+  /** Register a key event handler. Returns a cleanup function to unregister. */
   onKey(handler: (event: KeyEvent) => void): () => void {
     this.handlers.push(handler);
     return () => {
@@ -233,6 +243,7 @@ export class KeyboardInput {
     return Deno.stdin.read(this.readBuffer);
   }
 
+  /** Start the async read loop. Blocks until stop() is called or stdin closes. */
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -287,6 +298,7 @@ export class KeyboardInput {
     }
   }
 
+  /** Stop the read loop and close stdin to unblock pending reads. */
   stop(): void {
     this.running = false;
     try {
@@ -297,7 +309,7 @@ export class KeyboardInput {
   }
 }
 
-// Simple async key reading
+/** Read a single key event from stdin. Throws if stdin is closed. */
 export async function readKey(): Promise<KeyEvent> {
   const buffer = new Uint8Array(16);
   const n = await Deno.stdin.read(buffer);
@@ -305,7 +317,7 @@ export async function readKey(): Promise<KeyEvent> {
   return parseKeyEvent(buffer.slice(0, n));
 }
 
-// Key event iterator
+/** Async generator that yields key events from stdin until it closes. */
 export async function* keyEvents(): AsyncGenerator<KeyEvent> {
   const buffer = new Uint8Array(16);
 
@@ -321,7 +333,13 @@ export async function* keyEvents(): AsyncGenerator<KeyEvent> {
   }
 }
 
-// Helper to check for specific key combos
+/**
+ * Check if a key event matches a specific key and optional modifiers.
+ * Key comparison is case-insensitive. Modifier flags are only checked if specified.
+ * @param event - The key event to check
+ * @param key - The key name to match (case-insensitive)
+ * @param modifiers - Optional modifier flags to require
+ */
 export function isKey(
   event: KeyEvent,
   key: string,

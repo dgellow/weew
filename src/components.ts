@@ -1,4 +1,4 @@
-// Component system - simple, functional UI building blocks
+/** Component system — simple, functional UI building blocks for terminal interfaces. */
 
 import {
   bg,
@@ -11,7 +11,7 @@ import {
 import type { Canvas } from "./canvas.ts";
 import type { KeyEvent } from "./input.ts";
 
-// Base types
+/** A rectangle defined by position and dimensions. Used for layout and rendering. */
 export interface Rect {
   x: number;
   y: number;
@@ -19,6 +19,7 @@ export interface Rect {
   height: number;
 }
 
+/** Text styling options: foreground/background colors and text decorations. */
 export interface Style {
   fg?: string;
   bg?: string;
@@ -28,6 +29,7 @@ export interface Style {
   underline?: boolean;
 }
 
+/** A renderable UI element. All components implement this interface. */
 export interface Component {
   render(canvas: Canvas, rect: Rect): void;
 }
@@ -43,35 +45,63 @@ export interface InputComponent<U> extends Component {
   handleKey: KeyHandler<U>;
 }
 
-// Update types for interactive components
+/** State update returned by TextInput.handleKey. */
 export interface TextInputUpdate {
   value: string;
   cursorPos: number;
 }
 
+/** State update returned by Checkbox.handleKey. */
 export interface CheckboxUpdate {
   checked: boolean;
 }
 
+/** State update returned by Select.handleKey. */
 export interface SelectUpdate {
   selected: number;
   open: boolean;
 }
 
+/** State update returned by List.handleKey. */
 export interface ListUpdate {
   selected: number;
 }
 
+/** State update returned by Tabs.handleKey. */
 export interface TabsUpdate {
   activeTab: string;
 }
 
+/** State update returned by Tree.handleKey. */
 export interface TreeUpdate {
   selected: string;
   toggled?: string;
 }
 
-// Style helpers
+/**
+ * Custom key bindings for list navigation. Each action maps to an array of key specs.
+ * Key specs can include modifiers: `"Ctrl+d"`, `"Shift+Home"`, or plain keys: `"j"`, `"Up"`.
+ */
+export interface NavigationKeys {
+  up?: string[];
+  down?: string[];
+  top?: string[];
+  bottom?: string[];
+  pageUp?: string[];
+  pageDown?: string[];
+}
+
+/** State update returned by VirtualList.handleKey. */
+export interface VirtualListUpdate {
+  selected: number;
+  scrollY: number;
+}
+
+/**
+ * Build an ANSI style string from a Style object. Only emits text decoration codes (bold/dim/italic/underline), not fg/bg.
+ * @param s - Style object with boolean decoration flags
+ * @returns Concatenated ANSI escape codes for the enabled decorations
+ */
 export function buildStyle(s: Style): string {
   let result = "";
   if (s.bold) result += ansiStyle.bold;
@@ -81,7 +111,7 @@ export function buildStyle(s: Style): string {
   return result;
 }
 
-// Color helpers interface
+/** Named color accessors plus RGB and hex helpers. */
 export interface ColorHelpers {
   black: string;
   red: string;
@@ -96,12 +126,13 @@ export interface ColorHelpers {
   hex: (hex: string) => string;
 }
 
+/** Foreground and background color helpers. */
 export interface Colors {
   fg: ColorHelpers;
   bg: ColorHelpers;
 }
 
-// Color helpers for convenience
+/** Convenience color helpers with named colors, RGB, and hex support for both fg and bg. */
 export const colors: Colors = {
   fg: {
     black: fg.black,
@@ -141,7 +172,7 @@ export const colors: Colors = {
   },
 };
 
-// Text component
+/** Props for the Text component. */
 export interface TextProps {
   content: string;
   style?: Style;
@@ -149,6 +180,7 @@ export interface TextProps {
   align?: "left" | "center" | "right";
 }
 
+/** Render text with optional styling, alignment, and word wrapping. Accepts a string or TextProps. */
 export function Text(props: TextProps | string): Component {
   const p = typeof props === "string" ? { content: props } : props;
 
@@ -184,7 +216,7 @@ export function Text(props: TextProps | string): Component {
   };
 }
 
-// Box border characters
+/** Border character sets for Box. Use `"none"` for no border. */
 export const borders = {
   single: {
     topLeft: "┌",
@@ -223,7 +255,7 @@ export const borders = {
 
 export type BorderStyle = keyof typeof borders;
 
-// Box component
+/** Props for the Box component. */
 export interface BoxProps {
   border?: BorderStyle;
   borderColor?: string;
@@ -241,6 +273,7 @@ export interface BoxProps {
   child?: Component;
 }
 
+/** A bordered container with optional title, padding, background fill, and a child component. */
 export function Box(props: BoxProps = {}): Component {
   const border = props.border ?? "single";
   const borderChars = borders[border];
@@ -338,7 +371,7 @@ export function Box(props: BoxProps = {}): Component {
   };
 }
 
-// Progress bar component
+/** Props for the Progress bar component. */
 export interface ProgressProps {
   value: number; // 0-100
   width?: number;
@@ -349,6 +382,7 @@ export interface ProgressProps {
   showPercent?: boolean;
 }
 
+/** A horizontal progress bar. Value is clamped to 0–100. */
 export function Progress(props: ProgressProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -374,15 +408,17 @@ export function Progress(props: ProgressProps): Component {
   };
 }
 
-// Spinner component
+/** Braille spinner animation frames. */
 const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
+/** Props for the Spinner component. */
 export interface SpinnerProps {
   frame: number;
   label?: string;
   color?: string;
 }
 
+/** A braille-dot spinner with optional label. Animate by incrementing `frame` over time. */
 export function Spinner(props: SpinnerProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -399,7 +435,7 @@ export function Spinner(props: SpinnerProps): Component {
   };
 }
 
-// List component
+/** Props for the List component. */
 export interface ListProps {
   items: (string | Component)[];
   selected?: number;
@@ -407,6 +443,8 @@ export interface ListProps {
   itemStyle?: Style;
   bullet?: string;
   itemHeight?: number;
+  keys?: NavigationKeys;
+  pageSize?: number;
   renderItem?: (
     item: string | Component,
     index: number,
@@ -414,6 +452,7 @@ export interface ListProps {
   ) => Component;
 }
 
+/** A navigable list with bullet markers. Supports Up/Down/Home/End/PageUp/PageDown and custom key bindings. */
 export function List(props: ListProps): InputComponent<ListUpdate> {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -477,22 +516,41 @@ export function List(props: ListProps): InputComponent<ListUpdate> {
 
     handleKey(event: KeyEvent): ListUpdate | undefined {
       const selected = props.selected ?? 0;
-      if (event.key === "Up") {
+      const defaultKeys: Required<NavigationKeys> = {
+        up: ["Up"],
+        down: ["Down"],
+        top: ["Home"],
+        bottom: ["End"],
+        pageUp: ["PageUp"],
+        pageDown: ["PageDown"],
+      };
+      const k = { ...defaultKeys, ...props.keys };
+      const pageSize = props.pageSize ?? 10;
+
+      if (matchesAny(event, k.up)) {
         return { selected: Math.max(0, selected - 1) };
       }
-      if (event.key === "Down") {
+      if (matchesAny(event, k.down)) {
         return { selected: Math.min(props.items.length - 1, selected + 1) };
       }
-      if (event.key === "Home") return { selected: 0 };
-      if (event.key === "End") {
+      if (matchesAny(event, k.top)) return { selected: 0 };
+      if (matchesAny(event, k.bottom)) {
         return { selected: props.items.length - 1 };
+      }
+      if (matchesAny(event, k.pageUp)) {
+        return { selected: Math.max(0, selected - pageSize) };
+      }
+      if (matchesAny(event, k.pageDown)) {
+        return {
+          selected: Math.min(props.items.length - 1, selected + pageSize),
+        };
       }
       return undefined;
     },
   };
 }
 
-// Table component
+/** Props for the Table component. */
 export interface TableProps {
   headers?: string[];
   rows: string[][];
@@ -510,6 +568,7 @@ export interface TableProps {
   ) => Style | undefined;
 }
 
+/** A data table with optional headers, borders, column separators, and per-cell/row styling. */
 export function Table(props: TableProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -594,6 +653,21 @@ export function Table(props: TableProps): Component {
       }
     },
   };
+}
+
+// Key matching helpers
+function matchesKeySpec(event: KeyEvent, spec: string): boolean {
+  const parts = spec.split("+");
+  const keyName = parts[parts.length - 1];
+  if (event.key.toLowerCase() !== keyName.toLowerCase()) return false;
+  if (parts.includes("Ctrl") && !event.ctrl) return false;
+  if (parts.includes("Alt") && !event.alt) return false;
+  if (parts.includes("Shift") && !event.shift) return false;
+  return true;
+}
+
+function matchesAny(event: KeyEvent, specs: string[]): boolean {
+  return specs.some((spec) => matchesKeySpec(event, spec));
 }
 
 // Helper functions
@@ -702,7 +776,7 @@ function calculateColumnWidths(
   return widths;
 }
 
-// ScrollBox - scrollable container for content taller than viewport
+/** Props for the ScrollBox component. */
 export interface ScrollBoxProps {
   scrollY: number;
   contentHeight: number;
@@ -713,6 +787,7 @@ export interface ScrollBoxProps {
   child: Component;
 }
 
+/** A scrollable container with optional border and scrollbar. Clips content to the viewport using the canvas clip stack. */
 export function ScrollBox(props: ScrollBoxProps): Component {
   const border = props.border ?? "single";
   const borderChars = borders[border];
@@ -810,12 +885,13 @@ export function ScrollBox(props: ScrollBoxProps): Component {
   };
 }
 
-// Scrollbar position utility — reusable for custom scrollable components
+/** Scrollbar thumb position and size, returned by scrollbarPosition(). */
 export interface ScrollbarInfo {
   thumbPos: number;
   thumbSize: number;
 }
 
+/** Calculate scrollbar thumb position and size for custom scrollable components. */
 export function scrollbarPosition(params: {
   contentHeight: number;
   viewportHeight: number;
@@ -831,12 +907,13 @@ export function scrollbarPosition(params: {
   return { thumbPos, thumbSize };
 }
 
-// VirtualScrollBox - scrollable container that only renders visible content
+/** The range of visible rows passed to VirtualScrollBox's renderSlice callback. */
 export interface VisibleRange {
   start: number;
   end: number;
 }
 
+/** Props for the VirtualScrollBox component. */
 export interface VirtualScrollBoxProps {
   scrollY: number;
   contentHeight: number;
@@ -852,6 +929,7 @@ export interface VirtualScrollBoxProps {
   ) => void;
 }
 
+/** A virtualized scrollable container that only renders the visible slice of content. O(viewport) instead of O(content). */
 export function VirtualScrollBox(props: VirtualScrollBoxProps): Component {
   const border = props.border ?? "single";
   const borderChars = borders[border];
@@ -945,7 +1023,7 @@ export function VirtualScrollBox(props: VirtualScrollBoxProps): Component {
   };
 }
 
-// VirtualList - virtualized list with render callback for each item
+/** Props for the VirtualList component. */
 export interface VirtualListProps<T> {
   items: T[];
   selected?: number;
@@ -955,49 +1033,108 @@ export interface VirtualListProps<T> {
   borderColor?: string;
   title?: string;
   showScrollbar?: boolean;
+  keys?: NavigationKeys;
+  pageSize?: number;
   renderItem: (item: T, index: number, selected: boolean) => Component;
 }
 
-export function VirtualList<T>(props: VirtualListProps<T>): Component {
+/** A virtualized list that only renders visible items. Handles keyboard navigation and auto-scrolls to keep selection in view. */
+export function VirtualList<T>(
+  props: VirtualListProps<T>,
+): InputComponent<VirtualListUpdate> {
   const itemHeight = props.itemHeight ?? 1;
   const contentHeight = props.items.length * itemHeight;
+  let lastViewportHeight = 10;
 
-  return VirtualScrollBox({
-    scrollY: props.scrollY,
-    contentHeight,
-    border: props.border,
-    borderColor: props.borderColor,
-    title: props.title,
-    showScrollbar: props.showScrollbar,
-    renderSlice(canvas: Canvas, rect: Rect, range: VisibleRange) {
-      const startItem = Math.floor(range.start / itemHeight);
-      const endItem = Math.min(
-        props.items.length,
-        Math.ceil(range.end / itemHeight),
-      );
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      const borderChars = borders[props.border ?? "single"];
+      const borderOffset = borderChars ? 1 : 0;
+      lastViewportHeight = rect.height - borderOffset * 2;
 
-      for (let i = startItem; i < endItem; i++) {
-        const isSelected = props.selected === i;
-        const itemY = rect.y + (i * itemHeight - range.start);
-        const itemRect: Rect = {
-          x: rect.x,
-          y: itemY,
-          width: rect.width,
-          height: itemHeight,
-        };
+      VirtualScrollBox({
+        scrollY: props.scrollY,
+        contentHeight,
+        border: props.border,
+        borderColor: props.borderColor,
+        title: props.title,
+        showScrollbar: props.showScrollbar,
+        renderSlice(c: Canvas, sliceRect: Rect, range: VisibleRange) {
+          const startItem = Math.floor(range.start / itemHeight);
+          const endItem = Math.min(
+            props.items.length,
+            Math.ceil(range.end / itemHeight),
+          );
 
-        const component = props.renderItem(
-          props.items[i],
-          i,
-          isSelected,
-        );
-        component.render(canvas, itemRect);
-      }
+          for (let i = startItem; i < endItem; i++) {
+            const isSelected = props.selected === i;
+            const itemY = sliceRect.y + (i * itemHeight - range.start);
+            const itemRect: Rect = {
+              x: sliceRect.x,
+              y: itemY,
+              width: sliceRect.width,
+              height: itemHeight,
+            };
+
+            const component = props.renderItem(props.items[i], i, isSelected);
+            component.render(c, itemRect);
+          }
+        },
+      }).render(canvas, rect);
     },
-  });
+
+    handleKey(event: KeyEvent): VirtualListUpdate | undefined {
+      const selected = props.selected ?? 0;
+      const scrollY = props.scrollY;
+      const defaultKeys: Required<NavigationKeys> = {
+        up: ["Up"],
+        down: ["Down"],
+        top: ["Home"],
+        bottom: ["End"],
+        pageUp: ["PageUp"],
+        pageDown: ["PageDown"],
+      };
+      const k = { ...defaultKeys, ...props.keys };
+      const pageSize = props.pageSize ??
+        Math.max(1, Math.floor(lastViewportHeight / itemHeight));
+
+      let newSelected = selected;
+
+      if (matchesAny(event, k.up)) {
+        newSelected = Math.max(0, selected - 1);
+      } else if (matchesAny(event, k.down)) {
+        newSelected = Math.min(props.items.length - 1, selected + 1);
+      } else if (matchesAny(event, k.top)) {
+        newSelected = 0;
+      } else if (matchesAny(event, k.bottom)) {
+        newSelected = props.items.length - 1;
+      } else if (matchesAny(event, k.pageUp)) {
+        newSelected = Math.max(0, selected - pageSize);
+      } else if (matchesAny(event, k.pageDown)) {
+        newSelected = Math.min(props.items.length - 1, selected + pageSize);
+      } else {
+        return undefined;
+      }
+
+      // Scroll into view
+      let newScrollY = scrollY;
+      const selectedTop = newSelected * itemHeight;
+      const selectedBottom = selectedTop + itemHeight;
+      if (selectedTop < newScrollY) {
+        newScrollY = selectedTop;
+      } else if (selectedBottom > newScrollY + lastViewportHeight) {
+        newScrollY = selectedBottom - lastViewportHeight;
+      }
+
+      return {
+        selected: newSelected,
+        scrollY: Math.max(0, newScrollY),
+      };
+    },
+  };
 }
 
-// TextInput - editable text field
+/** Props for the TextInput component. */
 export interface TextInputProps {
   value: string;
   cursorPos: number;
@@ -1008,6 +1145,7 @@ export interface TextInputProps {
   width?: number;
 }
 
+/** An editable single-line text field with cursor, scrolling, and readline shortcuts (Ctrl+A/E/K/U). */
 export function TextInput(
   props: TextInputProps,
 ): InputComponent<TextInputUpdate> {
@@ -1107,12 +1245,13 @@ export function TextInput(
   };
 }
 
-// Focus management helpers
+/** An item in a FocusContainer with an ID and a component. */
 export interface FocusableItem {
   id: string;
   component: Component;
 }
 
+/** Props for the FocusContainer component. */
 export interface FocusContainerProps {
   items: FocusableItem[];
   focusedId: string;
@@ -1122,6 +1261,7 @@ export interface FocusContainerProps {
   itemHeight?: number;
 }
 
+/** A container that visually indicates which item is focused, with horizontal or vertical layout. */
 export function FocusContainer(props: FocusContainerProps): Component {
   const direction = props.direction ?? "vertical";
   const gap = props.gap ?? 0;
@@ -1185,13 +1325,14 @@ export function FocusContainer(props: FocusContainerProps): Component {
   };
 }
 
-// Divider - horizontal or vertical line separator
+/** Props for the Divider component. */
 export interface DividerProps {
   direction?: "horizontal" | "vertical";
   char?: string;
   style?: Style;
 }
 
+/** A horizontal or vertical line separator. */
 export function Divider(props: DividerProps = {}): Component {
   const direction = props.direction ?? "horizontal";
   const char = props.char ?? (direction === "horizontal" ? "─" : "│");
@@ -1213,13 +1354,14 @@ export function Divider(props: DividerProps = {}): Component {
   };
 }
 
-// Badge - small label with background
+/** Props for the Badge component. */
 export interface BadgeProps {
   text: string;
   style?: Style;
   padding?: number | { left?: number; right?: number };
 }
 
+/** A small inline label with background color and padding. */
 export function Badge(props: BadgeProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -1242,7 +1384,7 @@ export function Badge(props: BadgeProps): Component {
   };
 }
 
-// Dialog - modal overlay with dimmed background
+/** Props for the Dialog component. */
 export interface DialogProps {
   title?: string;
   border?: BorderStyle;
@@ -1253,6 +1395,7 @@ export interface DialogProps {
   dimBg?: string;
 }
 
+/** A centered modal overlay with a dimmed background and bordered content area. */
 export function Dialog(props: DialogProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -1277,13 +1420,14 @@ export function Dialog(props: DialogProps): Component {
   };
 }
 
-// Tabs - tab bar with switchable content panels
+/** A single tab with an ID, display label, and content component. */
 export interface Tab {
   id: string;
   label: string;
   content: Component;
 }
 
+/** Props for the Tabs component. */
 export interface TabsProps {
   tabs: Tab[];
   activeTab: string;
@@ -1291,6 +1435,7 @@ export interface TabsProps {
   activeTabStyle?: Style;
 }
 
+/** A tab bar with Left/Right navigation and switchable content panels below. */
 export function Tabs(props: TabsProps): InputComponent<TabsUpdate> {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -1342,7 +1487,7 @@ export function Tabs(props: TabsProps): InputComponent<TabsUpdate> {
   };
 }
 
-// Select - dropdown-style selector
+/** Props for the Select component. */
 export interface SelectProps {
   options: string[];
   selected: number;
@@ -1352,6 +1497,7 @@ export interface SelectProps {
   maxVisible?: number;
 }
 
+/** A dropdown-style selector. Space/Enter toggles open/close; Up/Down navigates when open. */
 export function Select(props: SelectProps): InputComponent<SelectUpdate> {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -1410,7 +1556,7 @@ export function Select(props: SelectProps): InputComponent<SelectUpdate> {
   };
 }
 
-// Checkbox
+/** Props for the Checkbox component. */
 export interface CheckboxProps {
   checked: boolean;
   label?: string;
@@ -1419,6 +1565,7 @@ export interface CheckboxProps {
   uncheckedChar?: string;
 }
 
+/** A checkbox that toggles on Space or Enter. Renders as `[✓]` or `[ ]` with optional label. */
 export function Checkbox(
   props: CheckboxProps,
 ): InputComponent<CheckboxUpdate> {
@@ -1445,13 +1592,14 @@ export function Checkbox(
   };
 }
 
-// Tree - recursive node tree
+/** A node in a Tree. May have children that can be expanded/collapsed. */
 export interface TreeNode {
   label: string;
   children?: TreeNode[];
   expanded?: boolean;
 }
 
+/** Props for the Tree component. */
 export interface TreeProps {
   nodes: TreeNode[];
   selected?: string;
@@ -1465,6 +1613,7 @@ export interface TreeProps {
   ) => Component;
 }
 
+/** A recursive tree view. Up/Down navigates, Left collapses or goes to parent, Right/Enter expands. */
 export function Tree(props: TreeProps): InputComponent<TreeUpdate> {
   const indent = props.indent ?? 2;
 
@@ -1610,7 +1759,7 @@ export function Tree(props: TreeProps): InputComponent<TreeUpdate> {
   };
 }
 
-// Toast - notification overlay
+/** Props for the Toast component. */
 export interface ToastProps {
   message: string;
   style?: Style;
@@ -1618,6 +1767,7 @@ export interface ToastProps {
   width?: number;
 }
 
+/** A centered notification bar at the top or bottom of the screen. */
 export function Toast(props: ToastProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {

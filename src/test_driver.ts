@@ -130,6 +130,18 @@ export class TestDriver<S> {
     this.renderFrame();
   }
 
+  /** Send multiple keys in sequence */
+  sendKeys(...keys: string[]): void {
+    for (const k of keys) {
+      this.sendKey(k);
+    }
+  }
+
+  /** Returns true if the string appears anywhere in the screen text */
+  findText(text: string): boolean {
+    return this.text.includes(text);
+  }
+
   /** Force a render and return screen as text */
   render(): string {
     this._needsRender = true;

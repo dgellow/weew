@@ -1,5 +1,8 @@
-// weew - A lightweight terminal UI library for Deno
-// No dependencies, no React, no JSX - just simple, functional components
+/**
+ * weew — A lightweight terminal UI library for Deno.
+ * No dependencies, no React, no JSX — just simple, functional components.
+ * @module
+ */
 
 // Core ANSI utilities
 export {
@@ -96,6 +99,7 @@ export type {
   KeyResult,
   ListProps,
   ListUpdate,
+  NavigationKeys,
   ProgressProps,
   Rect,
   ScrollbarInfo,
@@ -116,6 +120,7 @@ export type {
   TreeProps,
   TreeUpdate,
   VirtualListProps,
+  VirtualListUpdate,
   VirtualScrollBoxProps,
   VisibleRange,
 } from "./src/components.ts";

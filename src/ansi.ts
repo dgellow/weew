@@ -1,9 +1,12 @@
-// ANSI escape code utilities for terminal manipulation
+/** ANSI escape code utilities for terminal manipulation. */
 
+/** The ESC character (0x1b), used as the prefix for all ANSI sequences. */
 export const ESC: string = "\x1b";
+
+/** Control Sequence Introducer — ESC followed by `[`. Prefix for most ANSI control sequences. */
 export const CSI: string = `${ESC}[`;
 
-// Type definitions for ANSI objects
+/** Cursor movement and visibility commands. */
 export interface CursorCommands {
   hide: string;
   show: string;
@@ -17,6 +20,7 @@ export interface CursorCommands {
   restore: string;
 }
 
+/** Screen and line clearing commands. */
 export interface ClearCommands {
   screen: string;
   line: string;
@@ -24,6 +28,7 @@ export interface ClearCommands {
   toStart: string;
 }
 
+/** Text decoration and style commands (SGR sequences). */
 export interface StyleCommands {
   reset: string;
   bold: string;
@@ -36,6 +41,7 @@ export interface StyleCommands {
   strikethrough: string;
 }
 
+/** Color commands for foreground or background. Supports named colors, 256-color palette, and 24-bit RGB. */
 export interface ColorCommands {
   black: string;
   red: string;
@@ -58,12 +64,13 @@ export interface ColorCommands {
   rgb: (r: number, g: number, b: number) => string;
 }
 
+/** Alternate screen buffer commands. */
 export interface ScreenCommands {
   alt: string;
   main: string;
 }
 
-// Cursor movement
+/** Cursor movement and visibility control sequences. Uses 0-based coordinates. */
 export const cursor: CursorCommands = {
   hide: `${CSI}?25l`,
   show: `${CSI}?25h`,
@@ -77,7 +84,7 @@ export const cursor: CursorCommands = {
   restore: `${ESC}8`,
 };
 
-// Screen clearing
+/** Screen and line clearing sequences. */
 export const clear: ClearCommands = {
   screen: `${CSI}2J`,
   line: `${CSI}2K`,
@@ -85,7 +92,7 @@ export const clear: ClearCommands = {
   toStart: `${CSI}1J`,
 };
 
-// Text styles
+/** Text style SGR sequences (bold, dim, italic, etc.). */
 export const style: StyleCommands = {
   reset: `${CSI}0m`,
   bold: `${CSI}1m`,
@@ -98,7 +105,7 @@ export const style: StyleCommands = {
   strikethrough: `${CSI}9m`,
 };
 
-// Foreground colors
+/** Foreground color sequences. */
 export const fg: ColorCommands = {
   black: `${CSI}30m`,
   red: `${CSI}31m`,
@@ -122,7 +129,7 @@ export const fg: ColorCommands = {
     `${CSI}38;2;${r};${g};${b}m`,
 };
 
-// Background colors
+/** Background color sequences. */
 export const bg: ColorCommands = {
   black: `${CSI}40m`,
   red: `${CSI}41m`,
@@ -146,13 +153,13 @@ export const bg: ColorCommands = {
     `${CSI}48;2;${r};${g};${b}m`,
 };
 
-// Alternative screen buffer
+/** Alternate screen buffer sequences. */
 export const screen: ScreenCommands = {
   alt: `${CSI}?1049h`,
   main: `${CSI}?1049l`,
 };
 
-// OSC (Operating System Command) sequences
+/** Operating System Command sequences for terminal integration (title, hyperlinks, notifications). */
 export interface OscCommands {
   setTitle: (title: string) => string;
   hyperlink: (url: string, text: string) => string;
@@ -172,7 +179,11 @@ export const osc: OscCommands = {
   notify: (message: string): string => `\x1b]9;${message}\x07`,
 };
 
-// Strip ANSI codes from string
+/**
+ * Strip all ANSI escape sequences from a string.
+ * @param str - String potentially containing ANSI codes
+ * @returns The string with all ANSI sequences removed
+ */
 // deno-lint-ignore no-control-regex
 const ANSI_REGEX = /\x1b(?:\[[0-9;?]*[a-zA-Z~]|\].*?(?:\x07|\x1b\\)|\([A-Z])/g;
 
@@ -260,7 +271,13 @@ export function visibleLength(str: string): number {
   return width;
 }
 
-// Wrap text with style and reset
+/**
+ * Wrap text with ANSI style sequences, automatically appending a reset.
+ * @param text - The text to style
+ * @param styles - One or more ANSI style/color sequences to prepend
+ * @returns The styled string, or the original text if no styles given
+ * @example styled("hello", fg.red, style.bold) // "\x1b[31m\x1b[1mhello\x1b[0m"
+ */
 export function styled(text: string, ...styles: string[]): string {
   if (styles.length === 0) return text;
   return styles.join("") + text + style.reset;

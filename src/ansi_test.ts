@@ -86,3 +86,124 @@ Deno.test("stripAnsi handles OSC sequences", () => {
   assertEquals(stripAnsi("\x1b]0;title\x1b\\"), ""); // OSC with ST
   assertEquals(stripAnsi("text\x1b]0;window title\x07more"), "textmore");
 });
+
+// ============================================================
+// cursor, clear, style, fg, bg, screen, osc sequence tests
+// ============================================================
+
+import { bg, clear, cursor, fg, osc, screen, style } from "./ansi.ts";
+
+Deno.test("cursor.to produces correct CSI sequence (1-based)", () => {
+  const seq = cursor.to(5, 10);
+  assertEquals(seq.includes("11;6H"), true);
+});
+
+Deno.test("cursor.up produces correct sequence", () => {
+  const seq = cursor.up(3);
+  assertEquals(seq.includes("3A"), true);
+});
+
+Deno.test("cursor.hide contains DEC sequence for hiding", () => {
+  assertEquals(cursor.hide.includes("?25l"), true);
+});
+
+Deno.test("cursor.show contains DEC sequence for showing", () => {
+  assertEquals(cursor.show.includes("?25h"), true);
+});
+
+Deno.test("cursor.home contains H", () => {
+  assertEquals(cursor.home.includes("H"), true);
+});
+
+Deno.test("cursor.save and cursor.restore", () => {
+  assertEquals(cursor.save.includes("7"), true);
+  assertEquals(cursor.restore.includes("8"), true);
+});
+
+Deno.test("clear.screen contains 2J", () => {
+  assertEquals(clear.screen.includes("2J"), true);
+});
+
+Deno.test("clear.line contains 2K", () => {
+  assertEquals(clear.line.includes("2K"), true);
+});
+
+Deno.test("clear.toEnd contains 0J", () => {
+  assertEquals(clear.toEnd.includes("0J"), true);
+});
+
+Deno.test("clear.toStart contains 1J", () => {
+  assertEquals(clear.toStart.includes("1J"), true);
+});
+
+Deno.test("style.bold contains 1m", () => {
+  assertEquals(style.bold.includes("1m"), true);
+});
+
+Deno.test("style.dim contains 2m", () => {
+  assertEquals(style.dim.includes("2m"), true);
+});
+
+Deno.test("style.italic contains 3m", () => {
+  assertEquals(style.italic.includes("3m"), true);
+});
+
+Deno.test("style.underline contains 4m", () => {
+  assertEquals(style.underline.includes("4m"), true);
+});
+
+Deno.test("style.reset contains 0m", () => {
+  assertEquals(style.reset.includes("0m"), true);
+});
+
+Deno.test("fg.red contains 31m", () => {
+  assertEquals(fg.red.includes("31m"), true);
+});
+
+Deno.test("fg.rgb produces correct 24-bit color sequence", () => {
+  const seq = fg.rgb(255, 0, 128);
+  assertEquals(seq.includes("38;2;255;0;128m"), true);
+});
+
+Deno.test("fg.color produces correct 256-color sequence", () => {
+  const seq = fg.color(42);
+  assertEquals(seq.includes("38;5;42m"), true);
+});
+
+Deno.test("bg.blue contains 44m", () => {
+  assertEquals(bg.blue.includes("44m"), true);
+});
+
+Deno.test("bg.rgb produces correct 24-bit background color sequence", () => {
+  const seq = bg.rgb(0, 255, 0);
+  assertEquals(seq.includes("48;2;0;255;0m"), true);
+});
+
+Deno.test("screen.alt contains 1049h", () => {
+  assertEquals(screen.alt.includes("1049h"), true);
+});
+
+Deno.test("screen.main contains 1049l", () => {
+  assertEquals(screen.main.includes("1049l"), true);
+});
+
+Deno.test("osc.setTitle contains title and BEL", () => {
+  const seq = osc.setTitle("test");
+  assertEquals(seq.includes("test"), true);
+  assertEquals(seq.includes("\x07"), true);
+});
+
+Deno.test("osc.hyperlink contains url and text", () => {
+  const seq = osc.hyperlink("url", "text");
+  assertEquals(seq.includes("url"), true);
+  assertEquals(seq.includes("text"), true);
+});
+
+Deno.test("osc.bell equals BEL character", () => {
+  assertEquals(osc.bell, "\x07");
+});
+
+Deno.test("osc.notify contains message", () => {
+  const seq = osc.notify("msg");
+  assertEquals(seq.includes("msg"), true);
+});

@@ -1,5 +1,8 @@
-// Canvas - a 2D buffer for efficient terminal rendering
-// Uses flat parallel arrays for cache-friendly access and minimal GC pressure.
+/**
+ * Canvas — a double-buffered 2D cell grid for efficient terminal rendering.
+ * Uses flat parallel arrays for cache-friendly access and minimal GC pressure.
+ * Supports dirty-region tracking for diff-based updates and a clip stack for viewport clipping.
+ */
 
 import { charWidth, cursor, stripAnsi, style } from "./ansi.ts";
 import { getSize, write } from "./terminal.ts";
@@ -11,6 +14,7 @@ interface ClipRect {
   height: number;
 }
 
+/** A single cell in the canvas grid, containing a character and optional styling. */
 export interface Cell {
   char: string;
   fg?: string;
@@ -18,6 +22,11 @@ export interface Cell {
   style?: string;
 }
 
+/**
+ * Double-buffered canvas for terminal rendering.
+ * Cells are stored in flat parallel arrays (chars, fgs, bgs, styles) indexed by `y * width + x`.
+ * Call `render()` to diff against the previous frame and emit only changed cells to the terminal.
+ */
 export class Canvas {
   // Flat parallel arrays — index = y * width + x
   private charsA: string[];

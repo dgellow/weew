@@ -158,3 +158,94 @@ Deno.test("TestDriver.setState from handler triggers re-render", () => {
   driver.sendKey("x");
   assertTextAt(driver.screen, 0, 0, "after");
 });
+
+Deno.test("TestDriver.sendKeys sends multiple keys in sequence", () => {
+  const driver = new TestDriver(
+    {
+      initialState: { count: 0 },
+      render: (state) => Text(`Count: ${state.count}`),
+      onKey: (event, state) => {
+        if (event.key === "Up") return { count: state.count + 1 };
+        return undefined;
+      },
+    },
+    20,
+    5,
+  );
+
+  driver.sendKeys("Up", "Up", "Up", "Up", "Up");
+  assertEquals(driver.state.count, 5);
+  assertTextAt(driver.screen, 0, 0, "Count: 5");
+});
+
+Deno.test("TestDriver.findText returns true when text is on screen", () => {
+  const driver = new TestDriver(
+    {
+      initialState: {},
+      render: () => Text("Hello World"),
+    },
+    20,
+    5,
+  );
+
+  assertEquals(driver.findText("Hello"), true);
+  assertEquals(driver.findText("World"), true);
+  assertEquals(driver.findText("Hello World"), true);
+});
+
+Deno.test("TestDriver.findText returns false when text is absent", () => {
+  const driver = new TestDriver(
+    {
+      initialState: {},
+      render: () => Text("Hello World"),
+    },
+    20,
+    5,
+  );
+
+  assertEquals(driver.findText("Goodbye"), false);
+  assertEquals(driver.findText("hello"), false); // case-sensitive
+  assertEquals(driver.findText("xyz"), false);
+});
+
+Deno.test("TestDriver.sendKeys processes each key through onKey", () => {
+  const keysReceived: string[] = [];
+  const driver = new TestDriver(
+    {
+      initialState: { log: "" },
+      render: (state) => Text(state.log),
+      onKey: (event, state) => {
+        keysReceived.push(event.key);
+        return { log: state.log + event.key };
+      },
+    },
+    30,
+    5,
+  );
+
+  driver.sendKeys("a", "b", "c");
+  assertEquals(keysReceived, ["a", "b", "c"]);
+  assertEquals(driver.state.log, "abc");
+});
+
+Deno.test("TestDriver.findText with text spanning part of screen", () => {
+  const driver = new TestDriver(
+    {
+      initialState: {},
+      render: () =>
+        Column([
+          { component: Text("First line here"), height: 1 },
+          { component: Text("Second line here"), height: 1 },
+          { component: Text("Third line here"), height: 1 },
+        ]),
+    },
+    20,
+    5,
+  );
+
+  assertEquals(driver.findText("First"), true);
+  assertEquals(driver.findText("Second"), true);
+  assertEquals(driver.findText("Third"), true);
+  assertEquals(driver.findText("line here"), true);
+  assertEquals(driver.findText("Fourth"), false);
+});

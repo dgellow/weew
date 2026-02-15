@@ -195,3 +195,118 @@ Deno.test("Canvas.pushClip nested clips", () => {
 
   canvas.popClip();
 });
+
+// ============================================================
+// Additional Canvas tests
+// ============================================================
+
+Deno.test("Canvas.toAnsi with styled cells contains ANSI codes", () => {
+  const canvas = new Canvas(5, 1);
+  canvas.set(0, 0, { char: "A", fg: "\x1b[31m", bg: "\x1b[44m" });
+  const ansi = canvas.toAnsi();
+  assertEquals(ansi.includes("\x1b[31m"), true);
+  assertEquals(ansi.includes("\x1b[44m"), true);
+  assertEquals(ansi.includes("A"), true);
+});
+
+Deno.test("Canvas.toAnsi on blank canvas has no style codes", () => {
+  const canvas = new Canvas(3, 1);
+  const ansi = canvas.toAnsi();
+  assertEquals(ansi.includes("\x1b["), false);
+});
+
+Deno.test("Canvas.text with fg/bg/style options propagates to cells", () => {
+  const canvas = new Canvas(10, 1);
+  canvas.text(0, 0, "Hi", { fg: "\x1b[32m", bg: "\x1b[41m", style: "\x1b[1m" });
+  assertEquals(canvas.get(0, 0)?.fg, "\x1b[32m");
+  assertEquals(canvas.get(0, 0)?.bg, "\x1b[41m");
+  assertEquals(canvas.get(0, 0)?.style, "\x1b[1m");
+  assertEquals(canvas.get(1, 0)?.fg, "\x1b[32m");
+});
+
+Deno.test("Canvas.hline with style options", () => {
+  const canvas = new Canvas(10, 1);
+  canvas.hline(0, 0, 5, "-", { fg: "\x1b[31m", bg: "\x1b[42m" });
+  assertEquals(canvas.get(0, 0)?.char, "-");
+  assertEquals(canvas.get(0, 0)?.fg, "\x1b[31m");
+  assertEquals(canvas.get(0, 0)?.bg, "\x1b[42m");
+  assertEquals(canvas.get(4, 0)?.fg, "\x1b[31m");
+});
+
+Deno.test("Canvas.vline with style options", () => {
+  const canvas = new Canvas(1, 5);
+  canvas.vline(0, 0, 3, "|", { fg: "\x1b[33m", bg: "\x1b[40m" });
+  assertEquals(canvas.get(0, 0)?.char, "|");
+  assertEquals(canvas.get(0, 0)?.fg, "\x1b[33m");
+  assertEquals(canvas.get(0, 2)?.bg, "\x1b[40m");
+});
+
+Deno.test("Canvas.fill with style options", () => {
+  const canvas = new Canvas(5, 3);
+  canvas.fill(0, 0, 3, 2, "#", { fg: "\x1b[36m", bg: "\x1b[45m" });
+  assertEquals(canvas.get(0, 0)?.char, "#");
+  assertEquals(canvas.get(0, 0)?.fg, "\x1b[36m");
+  assertEquals(canvas.get(2, 1)?.bg, "\x1b[45m");
+});
+
+Deno.test("Canvas.regionToString on region partially outside bounds", () => {
+  const canvas = new Canvas(5, 3);
+  canvas.text(0, 0, "ABCDE");
+  canvas.text(0, 1, "FGHIJ");
+  // Region extends beyond canvas width (x=3, w=5 => 3+5=8 > 5)
+  const region = canvas.regionToString(3, 0, 5, 2);
+  assertEquals(region, "DE\nIJ");
+});
+
+Deno.test("Canvas.regionToString with zero-size region returns empty", () => {
+  const canvas = new Canvas(5, 3);
+  canvas.text(0, 0, "Hello");
+  const region = canvas.regionToString(0, 0, 0, 0);
+  assertEquals(region, "");
+});
+
+Deno.test("Canvas.resize clears previous state", () => {
+  const canvas = new Canvas(10, 5);
+  canvas.set(3, 2, { char: "Z" });
+  assertEquals(canvas.get(3, 2)?.char, "Z");
+
+  canvas.resize(10, 5);
+  assertEquals(canvas.get(3, 2)?.char, " ");
+});
+
+Deno.test("Canvas.toString with wide chars skips placeholders", () => {
+  const canvas = new Canvas(6, 1);
+  canvas.text(0, 0, "🎉AB CD");
+  const str = canvas.toString();
+  // Emoji takes 2 cells, placeholder is skipped in output
+  assertEquals(str.includes("🎉"), true);
+  assertEquals(str.includes("AB"), true);
+  // Output length: 🎉(1 char) + A + B + space + C + D = 6 visible chars but emoji placeholder skipped
+  assertEquals(str.startsWith("🎉AB"), true);
+});
+
+Deno.test("Canvas constructor with explicit size matches", () => {
+  const canvas = new Canvas(42, 17);
+  assertEquals(canvas.width, 42);
+  assertEquals(canvas.height, 17);
+});
+
+Deno.test("Canvas.text at edge of canvas does not overflow", () => {
+  const canvas = new Canvas(5, 1);
+  canvas.text(3, 0, "ABCDE");
+  // Only A and B fit at positions 3 and 4
+  assertEquals(canvas.get(3, 0)?.char, "A");
+  assertEquals(canvas.get(4, 0)?.char, "B");
+  // Position 5 is out of bounds
+  assertEquals(canvas.get(5, 0), undefined);
+});
+
+Deno.test("Canvas.fill with custom character fills all cells", () => {
+  const canvas = new Canvas(4, 3);
+  canvas.fill(0, 0, 4, 3, "X");
+  for (let y = 0; y < 3; y++) {
+    for (let x = 0; x < 4; x++) {
+      assertEquals(canvas.get(x, y)?.char, "X");
+    }
+  }
+});

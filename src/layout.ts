@@ -1,9 +1,12 @@
-// Layout engine - flexbox-inspired positioning
+/** Layout engine — flexbox-inspired positioning for arranging components. */
 
 import type { Canvas } from "./canvas.ts";
 import type { Component, Rect } from "./components.ts";
 
+/** Main axis direction for Flex layouts. */
 export type Direction = "row" | "column";
+
+/** Main-axis content distribution strategy. */
 export type Justify =
   | "start"
   | "end"
@@ -11,8 +14,10 @@ export type Justify =
   | "between"
   | "around"
   | "evenly";
+/** Cross-axis alignment strategy. */
 export type Align = "start" | "end" | "center" | "stretch";
 
+/** Props for the Flex layout component. */
 export interface FlexProps {
   direction?: Direction;
   justify?: Justify;
@@ -21,6 +26,7 @@ export interface FlexProps {
   children: FlexChild[];
 }
 
+/** A child element in a Flex layout with optional sizing constraints. */
 export interface FlexChild {
   component: Component;
   flex?: number; // Flex grow factor
@@ -32,6 +38,7 @@ export interface FlexChild {
   maxHeight?: number;
 }
 
+/** Flexbox-style layout. Distributes children along a main axis with optional gap, justify, and align. */
 export function Flex(props: FlexProps): Component {
   const direction = props.direction ?? "row";
   const justify = props.justify ?? "start";
@@ -183,7 +190,7 @@ export function Flex(props: FlexProps): Component {
   };
 }
 
-// Shorthand for row layout
+/** Shorthand for `Flex({ direction: "row", ... })`. */
 export function Row(
   children: FlexChild[],
   options?: Omit<FlexProps, "children" | "direction">,
@@ -191,7 +198,7 @@ export function Row(
   return Flex({ ...options, direction: "row", children });
 }
 
-// Shorthand for column layout
+/** Shorthand for `Flex({ direction: "column", ... })`. */
 export function Column(
   children: FlexChild[],
   options?: Omit<FlexProps, "children" | "direction">,
@@ -199,7 +206,7 @@ export function Column(
   return Flex({ ...options, direction: "column", children });
 }
 
-// Grid layout
+/** Props for the Grid layout component. */
 export interface GridProps {
   columns: number;
   rows?: number;
@@ -207,6 +214,7 @@ export interface GridProps {
   children: Component[];
 }
 
+/** A simple grid layout that distributes children into rows and columns of equal size. */
 export function Grid(props: GridProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -238,13 +246,14 @@ export function Grid(props: GridProps): Component {
   };
 }
 
-// Spacer - empty space for flex layouts
+/** Props for the Spacer helper. */
 export interface SpacerProps {
   width?: number;
   height?: number;
   flex?: number;
 }
 
+/** An empty FlexChild for creating space in Flex layouts. Use `flex: 1` to push items apart. */
 export function Spacer(props: SpacerProps = {}): FlexChild {
   return {
     component: { render() {} },
@@ -254,7 +263,7 @@ export function Spacer(props: SpacerProps = {}): FlexChild {
   };
 }
 
-// Stack - render multiple components at the same position (for overlays)
+/** Render multiple components at the same position. Later children paint over earlier ones. Useful for overlays. */
 export function Stack(children: Component[]): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -265,7 +274,7 @@ export function Stack(children: Component[]): Component {
   };
 }
 
-// Padding wrapper
+/** Props for the Padding wrapper. */
 export interface PaddingProps {
   padding: number | {
     top?: number;
@@ -276,6 +285,7 @@ export interface PaddingProps {
   child: Component;
 }
 
+/** Wrap a child component with padding on each side. Accepts a uniform number or per-side object. */
 export function Padding(props: PaddingProps): Component {
   const p = typeof props.padding === "number"
     ? {
@@ -303,13 +313,14 @@ export function Padding(props: PaddingProps): Component {
   };
 }
 
-// Center wrapper
+/** Props for the Center wrapper. */
 export interface CenterProps {
   child: Component;
   width?: number;
   height?: number;
 }
 
+/** Center a child component within its parent rect. Optionally constrain to a fixed width/height. */
 export function Center(props: CenterProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {
@@ -323,7 +334,7 @@ export function Center(props: CenterProps): Component {
   };
 }
 
-// Positioned - absolute positioning within parent
+/** Props for the Positioned component. */
 export interface PositionedProps {
   x?: number;
   y?: number;
@@ -334,6 +345,7 @@ export interface PositionedProps {
   child: Component;
 }
 
+/** Position a child at absolute coordinates within the parent rect. Supports x/y or right/bottom anchoring. */
 export function Positioned(props: PositionedProps): Component {
   return {
     render(canvas: Canvas, rect: Rect) {

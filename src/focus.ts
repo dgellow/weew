@@ -1,8 +1,9 @@
-// Focus group — pure function for routing key events to focused items with Tab navigation
+/** Focus group — pure function for routing key events to focused items with Tab navigation. */
 
 import type { KeyEvent } from "./input.ts";
 import type { InputComponent } from "./components.ts";
 
+/** An item in a focus group, binding an InputComponent to a state updater. */
 export interface FocusItem<S> {
   id: string;
   input: InputComponent<unknown>;
@@ -10,6 +11,7 @@ export interface FocusItem<S> {
   apply: (state: S, update: unknown) => S;
 }
 
+/** Configuration for a focus group: items, navigation behavior, and trapping. */
 export interface FocusGroupConfig<S> {
   items: FocusItem<S>[];
   focusedId: string;
@@ -24,12 +26,21 @@ export interface FocusGroupConfig<S> {
   };
 }
 
+/** Result of handling a key event within a focus group. */
 export interface FocusGroupResult<S> {
   state?: S;
   focusedId: string;
   handled: boolean;
 }
 
+/**
+ * Route a key event through a focus group.
+ * Handles Tab/Shift+Tab navigation between items and delegates other keys to the focused item's handleKey.
+ * @param config - Focus group configuration (items, focused ID, cycle/trap behavior)
+ * @param event - The key event to handle
+ * @param state - Current application state
+ * @returns The result with optional new state, updated focusedId, and whether the event was handled
+ */
 export function handleFocusGroup<S>(
   config: FocusGroupConfig<S>,
   event: KeyEvent,
