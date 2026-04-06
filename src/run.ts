@@ -6,11 +6,11 @@
 import { Canvas } from "./canvas.ts";
 import type { Component } from "./components.ts";
 import type { KeyEvent } from "./input.ts";
-import { type RenderContext, Screen } from "./screen.ts";
-import { getSize, type TerminalSize } from "./terminal.ts";
+import { type RenderContext, Screen, type ScreenIO } from "./screen.ts";
+import type { TerminalSize } from "./terminal.ts";
 
-/** Configuration for run(). User owns state via closures. */
-export interface RunConfig {
+/** App logic configuration — render, key handling, tick, resize. Runtime-agnostic. */
+export interface AppConfig {
   /** Return the current UI. Called after every event and on explicit render request. */
   render: (ctx: RenderContext) => Component;
   /** Key handler — mutate your own state, call ctrl.render() for async updates. */
@@ -25,6 +25,12 @@ export interface RunConfig {
   hideCursor?: boolean;
   /** Handle resize */
   onResize?: (size: TerminalSize) => void;
+}
+
+/** Configuration for run(). Combines app logic with runtime I/O. */
+export interface RunConfig extends AppConfig {
+  /** Terminal I/O implementation. Use denoTerminalIO() for Deno, TestScreenIO for tests. */
+  io: ScreenIO;
 }
 
 /** Control handle passed to run() callbacks for managing the event loop. */
@@ -69,6 +75,7 @@ export interface RunControl {
  */
 export async function run(config: RunConfig): Promise<void> {
   using screen = new Screen({
+    io: config.io,
     altScreen: config.altScreen,
     hideCursor: config.hideCursor,
   });
@@ -130,9 +137,9 @@ export async function run(config: RunConfig): Promise<void> {
   }
 }
 
-/** Render a component once to the terminal without any interactivity or event loop. */
-export function renderOnce(component: Component): void {
-  const size = getSize();
+/** Render a component once without any interactivity or event loop. */
+export function renderOnce(component: Component, io: ScreenIO): void {
+  const size = io.size();
   const canvas = new Canvas(size.columns, size.rows);
 
   component.render(canvas, {
@@ -142,5 +149,5 @@ export function renderOnce(component: Component): void {
     height: size.rows,
   });
 
-  canvas.fullRender();
+  io.flush(canvas);
 }

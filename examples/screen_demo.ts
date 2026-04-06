@@ -1,9 +1,9 @@
 // Screen API demo — user owns the event loop
-import { Box, colors, isKey, Screen, Text } from "../mod.ts";
+import { Box, colors, denoTerminalIO, isKey, Screen, Text } from "../mod.ts";
 
 let count = 0;
 
-using screen = new Screen();
+using screen = new Screen({ io: denoTerminalIO() });
 
 const render = () =>
   Box({

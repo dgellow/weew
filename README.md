@@ -1,7 +1,6 @@
 # weew
 
-A lightweight terminal UI library for Deno. No React, no JSX, no npm
-dependencies.
+A lightweight, runtime-agnostic terminal UI library. Works on Deno and Bun.
 
 ## Features
 
@@ -12,16 +11,26 @@ dependencies.
 - **Keyboard input** - Full key event handling with modifiers
 - **Diff-based rendering** - Only updates changed cells
 - **Resize handling** - Responds to terminal size changes
-- **Zero dependencies** - Pure Deno, no npm packages
+- **Runtime-agnostic core** - Canvas, components, layout, and input parsing work
+  on any JS runtime
+- **Zero dependencies**
 
 ## Quick Start
 
 ```typescript
-import { Box, colors, isKey, run, Text } from "https://deno.land/x/weew/mod.ts";
+import {
+  Box,
+  colors,
+  denoTerminalIO,
+  isKey,
+  run,
+  Text,
+} from "jsr:@dgellow/weew";
 
 let count = 0;
 
 await run({
+  io: denoTerminalIO(),
   render: () =>
     Box({
       border: "rounded",
@@ -40,6 +49,41 @@ await run({
 ```
 
 Run with: `deno run --allow-all your-app.ts`
+
+### Bun
+
+```typescript
+import {
+  Box,
+  colors,
+  isKey,
+  nodeTerminalIO,
+  run,
+  Text,
+} from "jsr:@dgellow/weew";
+
+let count = 0;
+
+await run({
+  io: nodeTerminalIO(),
+  render: () =>
+    Box({
+      border: "rounded",
+      borderColor: colors.fg.cyan,
+      title: " Counter ",
+      padding: 1,
+      child: Text(`Count: ${count}`),
+    }),
+
+  onKey: (event, ctrl) => {
+    if (isKey(event, "q")) ctrl.exit();
+    if (event.key === "Up") count++;
+    if (event.key === "Down") count--;
+  },
+});
+```
+
+Run with: `bun run your-app.ts`
 
 ## Components
 
@@ -270,7 +314,7 @@ Stack([
 ## Input Handling
 
 ```typescript
-import { isKey, Keys } from "weew";
+import { isKey, Keys } from "jsr:@dgellow/weew";
 
 // isKey is case-sensitive: isKey(event, "g") won't match "G"
 onKey: ((event, ctrl) => {
@@ -295,7 +339,7 @@ onKey: ((event, ctrl) => {
 ## Colors
 
 ```typescript
-import { bg, colors, fg } from "weew";
+import { bg, colors, fg } from "jsr:@dgellow/weew";
 
 // Named colors
 colors.fg.red;
@@ -318,14 +362,15 @@ fg.color(196); // 256 color
 ## Screen (Low-Level)
 
 Screen gives you full control over the event loop. You own the loop, Screen
-handles terminal setup/teardown and rendering.
+handles terminal setup/teardown and rendering. A `ScreenIO` implementation must
+be provided — use `denoTerminalIO()` for real terminals.
 
 ```typescript
-import { isKey, Screen, Text } from "weew";
+import { denoTerminalIO, isKey, Screen, Text } from "jsr:@dgellow/weew";
 
 let count = 0;
 
-using screen = new Screen();
+using screen = new Screen({ io: denoTerminalIO() });
 
 screen.draw(() => Text(`Count: ${count}`));
 
@@ -349,10 +394,10 @@ screen.draw(() => Text(data));
 
 ### Testing with TestScreenIO
 
-Screen accepts an injectable `io` for headless testing:
+Screen requires a `ScreenIO` — use `TestScreenIO` for headless testing:
 
 ```typescript
-import { Screen, TestScreenIO, Text } from "weew";
+import { Screen, TestScreenIO, Text } from "jsr:@dgellow/weew";
 
 const io = new TestScreenIO(80, 24);
 const screen = new Screen({ io });
@@ -373,6 +418,8 @@ for await (const event of screen.events()) {
 
 ```typescript
 run({
+  io: denoTerminalIO(),              // Required: runtime I/O
+
   render: (ctx) => Component,       // ctx has { width, height }
 
   onKey: (event, ctrl) => void,      // mutate your own state
@@ -402,17 +449,18 @@ ctrl.size(); // Get terminal size
 For one-off renders without the app loop:
 
 ```typescript
-import { Box, renderOnce, Text } from "weew";
+import { Box, denoTerminalIO, renderOnce, Text } from "jsr:@dgellow/weew";
 
 renderOnce(
   Box({
     border: "single",
     child: Text("Hello!"),
   }),
+  denoTerminalIO(),
 );
 ```
 
-Direct terminal control:
+Direct terminal control (Deno-specific):
 
 ```typescript
 import {
@@ -423,5 +471,5 @@ import {
   moveTo,
   showCursor,
   write,
-} from "weew";
+} from "jsr:@dgellow/weew";
 ```

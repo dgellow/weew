@@ -2,7 +2,7 @@
 
 import { Canvas } from "./canvas.ts";
 import type { Component, Rect } from "./components.ts";
-import type { RunConfig, RunControl } from "./run.ts";
+import type { AppConfig, RunControl } from "./run.ts";
 import type { RenderContext } from "./screen.ts";
 import type { KeyEvent } from "./input.ts";
 import type { TerminalSize } from "./terminal.ts";
@@ -17,10 +17,10 @@ export class TestDriver {
   private _needsRender = true;
   private _width: number;
   private _height: number;
-  private config: Required<RunConfig>;
+  private config: Required<AppConfig>;
   private readonly ctx: RunControl;
 
-  constructor(config: RunConfig, width = 80, height = 24) {
+  constructor(config: AppConfig, width = 80, height = 24) {
     this.config = {
       render: config.render,
       onKey: config.onKey ?? (() => {}),

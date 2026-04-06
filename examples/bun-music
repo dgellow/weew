@@ -1,4 +1,5 @@
-// weew music - a terminal music player demo
+#!/usr/bin/env bun
+// weew music - a terminal music player demo (Bun via nodeTerminalIO)
 //
 // Exercises: Box, Text, Row, Column, Flex, Table (with separators),
 // Progress, Spinner, Badge, Divider, ScrollBox (with clipping),
@@ -9,11 +10,11 @@ import {
   Box,
   colors,
   Column,
-  denoTerminalIO,
   Divider,
   FocusContainer,
   isKey,
   Keys,
+  nodeTerminalIO,
   Progress,
   Row,
   run,
@@ -134,7 +135,7 @@ let spec = Array.from({ length: SPEC_WIDTH }, () => 0);
 let loading = 0;
 
 await run({
-  io: denoTerminalIO(),
+  io: nodeTerminalIO(),
   render: () => {
     const album = ALBUMS[currentAlbum];
     const track = album.tracks[currentTrack];

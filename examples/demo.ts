@@ -4,6 +4,7 @@ import {
   Box,
   colors,
   Column,
+  denoTerminalIO,
   isKey,
   Keys,
   List,
@@ -20,6 +21,7 @@ let spinnerFrame = 0;
 const items = ["Dashboard", "Settings", "Profile", "Help", "Exit"];
 
 await run({
+  io: denoTerminalIO(),
   render: ({ width, height }) => {
     return Column([
       // Header

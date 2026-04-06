@@ -170,7 +170,8 @@ export {
 export type { KeyEvent } from "./src/input.ts";
 
 // Screen — low-level terminal session
-export { Screen, TestScreenIO } from "./src/screen.ts";
+export { denoTerminalIO, Screen, TestScreenIO } from "./src/screen.ts";
+export { nodeTerminalIO } from "./src/node_io.ts";
 export type {
   RenderContext,
   ScreenConfig,
@@ -180,12 +181,7 @@ export type {
 
 // run() — convenience wrapper over Screen
 export { renderOnce, run } from "./src/run.ts";
-export type { RunConfig, RunControl } from "./src/run.ts";
+export type { AppConfig, RunConfig, RunControl } from "./src/run.ts";
 
 // Testing
 export { TestDriver } from "./src/test_driver.ts";
-export {
-  assertCellAt,
-  assertRegion,
-  assertTextAt,
-} from "./src/test_helpers.ts";

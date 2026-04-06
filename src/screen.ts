@@ -24,16 +24,17 @@ import {
   onResize,
   setRawMode,
   showCursor as termShowCursor,
+  write,
 } from "./terminal.ts";
 
 /** Configuration for creating a Screen. */
 export interface ScreenConfig {
+  /** Terminal I/O implementation. Use denoTerminalIO() for Deno, TestScreenIO for tests. */
+  io: ScreenIO;
   /** Use alternate screen buffer (default: true) */
   altScreen?: boolean;
   /** Hide cursor (default: true) */
   hideCursor?: boolean;
-  /** Injectable I/O for testing. Defaults to real terminal. */
-  io?: ScreenIO;
 }
 
 /**
@@ -68,8 +69,8 @@ export interface ResizeScreenEvent {
 /** Events yielded by Screen.events(). */
 export type ScreenEvent = KeyScreenEvent | ResizeScreenEvent;
 
-/** Default ScreenIO that uses the real terminal. */
-function terminalIO(): ScreenIO {
+/** ScreenIO implementation for Deno's terminal APIs. */
+export function denoTerminalIO(): ScreenIO {
   return {
     size: getSize,
 
@@ -87,7 +88,8 @@ function terminalIO(): ScreenIO {
     },
 
     flush(canvas: Canvas): void {
-      canvas.render();
+      const output = canvas.render();
+      if (output) write(output);
     },
 
     async *events(): AsyncGenerator<ScreenEvent> {
@@ -155,7 +157,7 @@ function terminalIO(): ScreenIO {
  *
  * @example
  * ```ts
- * using screen = new Screen();
+ * using screen = new Screen({ io: denoTerminalIO() });
  *
  * screen.draw(() => Text("Hello!"));
  *
@@ -172,10 +174,10 @@ export class Screen {
   private readonly hideCursor: boolean;
   private readonly io: ScreenIO;
 
-  constructor(config?: ScreenConfig) {
-    this.altScreen = config?.altScreen ?? true;
-    this.hideCursor = config?.hideCursor ?? true;
-    this.io = config?.io ?? terminalIO();
+  constructor(config: ScreenConfig) {
+    this.altScreen = config.altScreen ?? true;
+    this.hideCursor = config.hideCursor ?? true;
+    this.io = config.io;
 
     const size = this.io.size();
     this.canvas = new Canvas(size.columns, size.rows);
@@ -250,7 +252,7 @@ export class Screen {
     this.io.teardown(this.altScreen, this.hideCursor);
   }
 
-  /** Dispose support for `using screen = new Screen()`. */
+  /** Dispose support for `using screen = new Screen({ io })`. */
   [Symbol.dispose](): void {
     this.close();
   }

@@ -1,10 +1,11 @@
 // Simple counter example
 
-import { Box, colors, isKey, run, Text } from "../mod.ts";
+import { Box, colors, denoTerminalIO, isKey, run, Text } from "../mod.ts";
 
 let count = 0;
 
 await run({
+  io: denoTerminalIO(),
   render: () =>
     Box({
       border: "rounded",

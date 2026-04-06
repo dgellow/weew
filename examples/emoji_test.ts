@@ -1,11 +1,12 @@
 // Quick emoji and animation test
-import { Box, colors, Column, run, Text } from "../mod.ts";
+import { Box, colors, Column, denoTerminalIO, run, Text } from "../mod.ts";
 
 const emojis = ["🎉", "🚀", "⭐", "🔥", "💯", "✨", "🎯", "🌟"];
 
 let frame = 0;
 
 await run({
+  io: denoTerminalIO(),
   tickInterval: 100,
 
   onTick: () => {

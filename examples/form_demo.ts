@@ -3,6 +3,7 @@ import {
   Box,
   colors,
   Column,
+  denoTerminalIO,
   handleFocusGroup,
   Row,
   run,
@@ -37,6 +38,7 @@ let messages = [
 ];
 
 await run({
+  io: denoTerminalIO(),
   render: () =>
     Row([
       // Left panel - Form

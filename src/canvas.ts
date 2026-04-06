@@ -5,7 +5,6 @@
  */
 
 import { charWidth, cursor, stripAnsi, style } from "./ansi.ts";
-import { getSize, write } from "./terminal.ts";
 
 interface ClipRect {
   x: number;
@@ -63,10 +62,9 @@ export class Canvas {
   width: number;
   height: number;
 
-  constructor(width?: number, height?: number) {
-    const size = getSize();
-    this.width = width ?? size.columns;
-    this.height = height ?? size.rows;
+  constructor(width: number, height: number) {
+    this.width = width;
+    this.height = height;
     const len = this.width * this.height;
 
     this.charsA = new Array<string>(len).fill(" ");
@@ -274,8 +272,8 @@ export class Canvas {
     }
   }
 
-  /** Render to terminal with diff-based updates */
-  render(): void {
+  /** Diff against the previous frame and return ANSI escape output for changed cells. */
+  render(): string {
     const parts: string[] = [];
     let penX = -1, penY = -1;
     let curStyle: string | undefined,
@@ -336,7 +334,6 @@ export class Canvas {
 
     if (parts.length > 0) {
       parts.push(style.reset);
-      write(parts.join(""));
     }
 
     // Swap buffers
@@ -358,16 +355,17 @@ export class Canvas {
     }
 
     this.resetDirty();
+    return parts.join("");
   }
 
   /** Force full redraw (ignores diff) */
-  fullRender(): void {
+  fullRender(): string {
     this.prevChars = null;
     this.prevFgs = null;
     this.prevBgs = null;
     this.prevStys = null;
     this.markFullDirty();
-    this.render();
+    return this.render();
   }
 
   /** Get plain text representation of the canvas (no styles) */
