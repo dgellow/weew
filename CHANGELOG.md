@@ -1,8 +1,14 @@
 # Changelog
 
-## 0.4.0
+## 0.5.0
 
 ### ⚠️ Breaking Changes
+
+- runtime-agnostic core, Bun support via nodeTerminalIO
+
+## 0.4.0
+
+### â ï¸ Breaking Changes
 
 - add Screen primitive, rename App types to Run
 
@@ -12,7 +18,7 @@
 
 ## 0.3.0
 
-### â ï¸ Breaking Changes
+### Ã¢ÂÂ Ã¯Â¸Â Breaking Changes
 
 - remove state from App, fix Shift+Tab, case-sensitive isKey
 
