@@ -798,6 +798,34 @@ describe("nodeTerminalIO", () => {
     screen.close();
     screen.close();
   });
+
+  test("close unblocks events generator", async () => {
+    const io = nodeTerminalIO();
+    const screen = new Screen({ io });
+
+    // Start consuming events (this blocks on stdin read)
+    const eventsPromise = (async () => {
+      for await (const _event of screen.events()) {
+        // consume
+      }
+    })();
+
+    // Give the generator time to enter the await
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Close should unblock the generator, not hang
+    screen.close();
+
+    // If close() hangs, this timeout will fail the test
+    const timeout = new Promise((_, reject) =>
+      setTimeout(
+        () =>
+          reject(new Error("close() hung — events generator not unblocked")),
+        2000,
+      )
+    );
+    await Promise.race([eventsPromise, timeout]);
+  });
 });
 
 // -- TestDriver --

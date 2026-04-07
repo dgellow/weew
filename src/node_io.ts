@@ -1,10 +1,10 @@
 /** ScreenIO implementation for runtimes that support node:process and node:buffer. */
 
-import type { Buffer } from "node:buffer";
+import { once } from "node:events";
 import nodeProcess from "node:process";
 import { clear, cursor, screen } from "./ansi.ts";
 import type { Canvas } from "./canvas.ts";
-import { parseKeyEvent } from "./input.ts";
+import { keyEventsFrom } from "./input.ts";
 import type { ScreenEvent, ScreenIO } from "./screen.ts";
 
 /** Create a ScreenIO backed by node:process stdin/stdout. */
@@ -12,6 +12,7 @@ export function nodeTerminalIO(): ScreenIO {
   const encoder = new TextEncoder();
   let closed = false;
   let onClose: (() => void) | null = null;
+  let onCloseRead: (() => void) | null = null;
 
   function writeStr(str: string): void {
     nodeProcess.stdout.write(encoder.encode(str));
@@ -69,48 +70,44 @@ export function nodeTerminalIO(): ScreenIO {
       };
       nodeProcess.on("SIGWINCH", resizeHandler);
 
-      // Handle keyboard input with ESC disambiguation
-      const ESC_TIMEOUT = 50;
-      let pendingEsc: Uint8Array | null = null;
-      let escTimer: ReturnType<typeof setTimeout> | null = null;
+      // Key reader using shared keyEventsFrom with pull-based stdin reads.
+      // Race each read against a close signal so close() can unblock it.
+      const closeSignal = new Promise<null>((resolve) => {
+        onCloseRead = () => resolve(null);
+      });
 
-      const dataHandler = (chunk: Buffer) => {
-        const bytes = new Uint8Array(chunk);
-
-        if (bytes.length === 1 && bytes[0] === 0x1b) {
-          pendingEsc = bytes;
-          escTimer = setTimeout(() => {
-            if (pendingEsc) {
-              queue.push({ ...parseKeyEvent(pendingEsc), type: "key" });
-              pendingEsc = null;
-              notify();
-            }
-          }, ESC_TIMEOUT);
-          return;
+      const read = async (): Promise<Uint8Array | null> => {
+        if (closed) return null;
+        try {
+          const result = await Promise.race([
+            once(nodeProcess.stdin, "data").then(
+              ([chunk]) => new Uint8Array(chunk),
+            ),
+            closeSignal,
+          ]);
+          return result;
+        } catch {
+          return null;
         }
-
-        if (pendingEsc) {
-          if (escTimer) clearTimeout(escTimer);
-          const combined = new Uint8Array(pendingEsc.length + bytes.length);
-          combined.set(pendingEsc);
-          combined.set(bytes, pendingEsc.length);
-          pendingEsc = null;
-          queue.push({ ...parseKeyEvent(combined), type: "key" });
-          notify();
-          return;
-        }
-
-        queue.push({ ...parseKeyEvent(bytes), type: "key" });
-        notify();
       };
-      nodeProcess.stdin.on("data", dataHandler);
+
+      let keyReaderDone = false;
+      const keyReaderPromise = (async () => {
+        for await (const event of keyEventsFrom(read)) {
+          if (closed) break;
+          queue.push({ ...event, type: "key" as const });
+          notify();
+        }
+        keyReaderDone = true;
+        notify();
+      })();
 
       try {
-        while (!closed) {
+        while (!closed && !keyReaderDone) {
           while (queue.length > 0) {
             yield queue.shift()!;
           }
-          if (closed) break;
+          if (closed || keyReaderDone) break;
           await new Promise<void>((resolve) => {
             wakeup = resolve;
           });
@@ -120,9 +117,8 @@ export function nodeTerminalIO(): ScreenIO {
           yield queue.shift()!;
         }
       } finally {
-        nodeProcess.stdin.off("data", dataHandler);
         nodeProcess.off("SIGWINCH", resizeHandler);
-        if (escTimer) clearTimeout(escTimer);
+        await keyReaderPromise.catch(() => {});
         onClose = null;
       }
     },
@@ -130,6 +126,7 @@ export function nodeTerminalIO(): ScreenIO {
     close(): void {
       closed = true;
       nodeProcess.stdin.pause();
+      onCloseRead?.();
       onClose?.();
     },
   };
