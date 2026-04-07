@@ -1,0 +1,5 @@
+#!/usr/bin/env bun
+import { nodeTerminalIO } from "../../mod.ts";
+import { musicApp } from "./app.ts";
+
+await musicApp(nodeTerminalIO());
