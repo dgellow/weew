@@ -252,53 +252,20 @@ export class KeyboardInput {
     if (this.running) return;
     this.running = true;
 
-    const ESC_TIMEOUT = 50;
-
-    while (this.running) {
+    const read: ReadFn = async () => {
       try {
         const n = await this.doRead();
-        if (n === null) break;
-
-        const bytes = this.readBuffer.slice(0, n);
-
-        // ESC disambiguation: lone 0x1b could be Escape or start of sequence
-        if (n === 1 && bytes[0] === 0x1b) {
-          // Race a second read against a timeout
-          const nextRead = Deno.stdin.read(this.readBuffer);
-          const timeout = new Promise<"timeout">((resolve) =>
-            setTimeout(() => resolve("timeout"), ESC_TIMEOUT)
-          );
-
-          const result = await Promise.race([nextRead, timeout]);
-
-          if (result === "timeout") {
-            // Lone Escape key
-            this.emit(parseKeyEvent(bytes));
-            // Store the pending read for next iteration
-            this.pendingRead = nextRead;
-          } else {
-            // Got more bytes — combine with ESC and parse as sequence
-            if (result === null) break;
-            const combined = new Uint8Array(1 + result);
-            combined[0] = 0x1b;
-            combined.set(this.readBuffer.slice(0, result), 1);
-            this.emit(parseKeyEvent(combined));
-          }
-          continue;
-        }
-
-        const event = parseKeyEvent(bytes);
-        this.emit(event);
+        return n === null ? null : this.readBuffer.slice(0, n);
       } catch (e) {
-        if (!this.running) break;
-        if (e instanceof Deno.errors.Interrupted) {
-          break;
-        }
-        if (e instanceof Deno.errors.BadResource) {
-          break;
-        }
+        if (e instanceof Deno.errors.Interrupted) return null;
+        if (e instanceof Deno.errors.BadResource) return null;
         throw e;
       }
+    };
+
+    for await (const event of keyEventsFrom(read)) {
+      if (!this.running) break;
+      this.emit(event);
     }
   }
 
@@ -322,59 +289,77 @@ export async function readKey(): Promise<KeyEvent> {
 }
 
 /**
- * Async generator that yields key events from stdin until it closes.
+ * Async generator that yields key events from Deno stdin.
+ * Delegates to keyEventsFrom() with a Deno.stdin ReadFn.
+ */
+export async function* keyEvents(): AsyncGenerator<KeyEvent> {
+  const buffer = new Uint8Array(16);
+  const read: ReadFn = async () => {
+    try {
+      const n = await Deno.stdin.read(buffer);
+      return n === null ? null : buffer.slice(0, n);
+    } catch (e) {
+      if (e instanceof Deno.errors.Interrupted) return null;
+      if (e instanceof Deno.errors.BadResource) return null;
+      throw e;
+    }
+  };
+  yield* keyEventsFrom(read);
+}
+
+/** A function that reads the next chunk of bytes from stdin. Returns null on EOF. */
+export type ReadFn = () => Promise<Uint8Array | null>;
+
+/**
+ * Runtime-agnostic async generator that yields key events from a ReadFn.
  * Handles ESC disambiguation with a 50ms timeout to distinguish
  * lone Escape from escape sequences.
  */
-export async function* keyEvents(): AsyncGenerator<KeyEvent> {
+export async function* keyEventsFrom(read: ReadFn): AsyncGenerator<KeyEvent> {
   const ESC_TIMEOUT = 50;
-  const buffer = new Uint8Array(16);
-  let pendingRead: Promise<number | null> | null = null;
+  let pendingRead: Promise<Uint8Array | null> | null = null;
 
-  function doRead(): Promise<number | null> {
+  function doRead(): Promise<Uint8Array | null> {
     if (pendingRead) {
       const p = pendingRead;
       pendingRead = null;
       return p;
     }
-    return Deno.stdin.read(buffer);
+    return read();
   }
 
   while (true) {
-    try {
-      const n = await doRead();
-      if (n === null) break;
+    const bytes = await doRead();
+    if (bytes === null) break;
 
-      const bytes = buffer.slice(0, n);
+    if (bytes.length === 1 && bytes[0] === 0x1b) {
+      const nextRead = read();
+      const timeout = new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), ESC_TIMEOUT)
+      );
 
-      // ESC disambiguation: lone 0x1b could be Escape or start of sequence
-      if (n === 1 && bytes[0] === 0x1b) {
-        const nextRead = Deno.stdin.read(buffer);
-        const timeout = new Promise<"timeout">((resolve) =>
-          setTimeout(() => resolve("timeout"), ESC_TIMEOUT)
-        );
+      const result = await Promise.race([nextRead, timeout]);
 
-        const result = await Promise.race([nextRead, timeout]);
-
-        if (result === "timeout") {
-          yield parseKeyEvent(bytes);
-          pendingRead = nextRead;
-        } else {
-          if (result === null) break;
-          const combined = new Uint8Array(1 + result);
-          combined[0] = 0x1b;
-          combined.set(buffer.slice(0, result), 1);
-          yield parseKeyEvent(combined);
-        }
-        continue;
+      if (result === "timeout") {
+        yield parseKeyEvent(bytes);
+        pendingRead = nextRead;
+      } else if (result === null) {
+        yield parseKeyEvent(bytes);
+        break;
+      } else if (result.length === 1 && result[0] === 0x1b) {
+        // Another lone ESC — emit the first, loop back to disambiguate the second
+        yield parseKeyEvent(bytes);
+        pendingRead = Promise.resolve(result);
+      } else {
+        const combined = new Uint8Array(1 + result.length);
+        combined[0] = 0x1b;
+        combined.set(result, 1);
+        yield parseKeyEvent(combined);
       }
-
-      yield parseKeyEvent(bytes);
-    } catch (e) {
-      if (e instanceof Deno.errors.Interrupted) break;
-      if (e instanceof Deno.errors.BadResource) break;
-      throw e;
+      continue;
     }
+
+    yield parseKeyEvent(bytes);
   }
 }
 

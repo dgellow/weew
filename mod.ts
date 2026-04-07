@@ -166,11 +166,12 @@ export {
   isKey,
   KeyboardInput,
   keyEvents,
+  keyEventsFrom,
   Keys,
   parseKeyEvent,
   readKey,
 } from "./src/input.ts";
-export type { KeyEvent } from "./src/input.ts";
+export type { KeyEvent, ReadFn } from "./src/input.ts";
 
 // Screen — low-level terminal session
 export { denoTerminalIO, Screen, TestScreenIO } from "./src/screen.ts";

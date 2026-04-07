@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { isKey, Keys, parseKeyEvent } from "./input.ts";
+import { isKey, keyEventsFrom, Keys, parseKeyEvent } from "./input.ts";
 import type { KeyEvent } from "./input.ts";
 
 function makeKeyEvent(
@@ -199,4 +199,99 @@ Deno.test("parseKeyEvent: modified Shift+Tab (1;2Z)", () => {
   assertEquals(event.key, Keys.Tab);
   assertEquals(event.shift, true);
   assertEquals(event.ctrl, false);
+});
+
+// -- keyEventsFrom --
+
+/** Create a ReadFn from a sequence of chunks with optional delays. */
+function mockReader(
+  chunks: { bytes: Uint8Array; delayMs?: number }[],
+): () => Promise<Uint8Array | null> {
+  let i = 0;
+  return () => {
+    if (i >= chunks.length) return Promise.resolve(null);
+    const chunk = chunks[i++];
+    if (chunk.delayMs) {
+      return new Promise((resolve) =>
+        setTimeout(() => resolve(chunk.bytes), chunk.delayMs)
+      );
+    }
+    return Promise.resolve(chunk.bytes);
+  };
+}
+
+async function collectEvents(
+  read: () => Promise<Uint8Array | null>,
+): Promise<KeyEvent[]> {
+  const events: KeyEvent[] = [];
+  for await (const event of keyEventsFrom(read)) {
+    events.push(event);
+  }
+  return events;
+}
+
+const kefOpts = { sanitizeOps: false, sanitizeResources: false };
+
+Deno.test({
+  ...kefOpts,
+  name: "keyEventsFrom: regular ASCII keys",
+  fn: async () => {
+    const read = mockReader([
+      { bytes: new Uint8Array([0x61]) }, // 'a'
+      { bytes: new Uint8Array([0x62]) }, // 'b'
+    ]);
+    const events = await collectEvents(read);
+    assertEquals(events.length, 2);
+    assertEquals(events[0].key, "a");
+    assertEquals(events[1].key, "b");
+  },
+});
+
+Deno.test({
+  ...kefOpts,
+  name: "keyEventsFrom: ESC followed by sequence bytes",
+  fn: async () => {
+    // ESC arrives, then arrow-up bytes arrive quickly (before 50ms timeout)
+    const read = mockReader([
+      { bytes: new Uint8Array([0x1b]) },
+      { bytes: new Uint8Array([0x5b, 0x41]) }, // [ A = Up
+    ]);
+    const events = await collectEvents(read);
+    assertEquals(events.length, 1);
+    assertEquals(events[0].key, "Up");
+  },
+});
+
+Deno.test({
+  ...kefOpts,
+  name: "keyEventsFrom: lone ESC when no follow-up bytes",
+  fn: async () => {
+    // ESC arrives, then nothing for >50ms, then EOF
+    const read = mockReader([
+      { bytes: new Uint8Array([0x1b]) },
+      { bytes: new Uint8Array([0x61]), delayMs: 100 }, // 'a' after 100ms
+    ]);
+    const events = await collectEvents(read);
+    assertEquals(events.length, 2);
+    assertEquals(events[0].key, "Escape");
+    assertEquals(events[1].key, "a");
+  },
+});
+
+Deno.test({
+  ...kefOpts,
+  name: "keyEventsFrom: two ESC keys in quick succession",
+  fn: async () => {
+    // Two lone ESC bytes, each followed by a delay > 50ms
+    // Should produce two separate Escape events
+    const read = mockReader([
+      { bytes: new Uint8Array([0x1b]) },
+      { bytes: new Uint8Array([0x1b]), delayMs: 100 },
+      // EOF after second ESC times out
+    ]);
+    const events = await collectEvents(read);
+    assertEquals(events.length, 2);
+    assertEquals(events[0].key, "Escape");
+    assertEquals(events[1].key, "Escape");
+  },
 });
