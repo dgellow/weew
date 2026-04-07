@@ -8,10 +8,10 @@
   },
   "tasks": {
     "demo": "deno run -A examples/demo.ts",
-    "music": "deno run -A examples/music.ts",
+    "music": "deno run -A examples/music-app/deno.ts",
     "simple": "deno run -A examples/simple.ts",
-    "check": "deno check mod.ts examples/*.ts",
-    "test": "deno test -A src/*_test.ts",
+    "check": "deno check",
+    "test": "deno test -A",
     "bench": "deno bench --allow-all src/bench.ts",
     "lint": "deno lint",
     "fmt": "deno fmt"

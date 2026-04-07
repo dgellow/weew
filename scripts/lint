@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-deno fmt --check
-deno lint
-deno check
+deno task fmt --check
+deno task lint
+deno task check
