@@ -18,13 +18,15 @@ A lightweight, runtime-agnostic terminal UI library. Works on Deno and Bun.
   loop. Screen handles terminal plumbing (alt screen, raw mode, cursor). `run()`
   is convenience sugar on top of Screen for callback-style apps.
 - **Injectable I/O.** Screen requires a ScreenIO interface — no hidden runtime
-  defaults. `denoTerminalIO()` provides the Deno implementation. TestScreenIO
-  provides headless testing. Canvas and all components are runtime-agnostic.
-- **Runtime-agnostic core.** Canvas, components, layout, focus, and input
-  parsing have zero runtime dependencies. Only terminal.ts and denoTerminalIO()
-  use Deno-specific APIs.
+  defaults. `denoTerminalIO()` and `nodeTerminalIO()` provide the runtime
+  implementations. TestScreenIO provides headless testing.
+- **Runtime-agnostic core.** Canvas, components, layout, focus, input parsing,
+  Screen, and run() have zero runtime dependencies. Runtime-specific code lives
+  in `deno_io.ts` and `node_io.ts`. ESC key disambiguation lives in the shared
+  `keyEventsFrom(read)` generator — both runtimes provide a `ReadFn`.
 - **Canvas double-buffering.** Canvas uses bufferA/bufferB swap with in-place
-  clear for efficient rendering.
+  clear for efficient rendering. `render()` returns the ANSI diff string — the
+  caller (ScreenIO.flush) writes it.
 - **Component pattern.** Components implement `{ render(canvas, rect) }`.
   Interactive components extend this with `handleKey` returning typed updates.
 - **No circular imports.** canvas.ts defines its own `ClipRect` instead of
@@ -32,19 +34,19 @@ A lightweight, runtime-agnostic terminal UI library. Works on Deno and Bun.
 
 ## Modules
 
-| Module               | Purpose                                            |
-| -------------------- | -------------------------------------------------- |
-| `src/ansi.ts`        | ANSI escape codes, color helpers, string utilities |
-| `src/canvas.ts`      | Double-buffered rendering surface with clip stack  |
-| `src/components.ts`  | UI components (Text, Box, List, Table, etc.)       |
-| `src/layout.ts`      | Layout primitives (Row, Column, Flex, Grid, etc.)  |
-| `src/input.ts`       | Keyboard event parsing from raw terminal bytes     |
-| `src/focus.ts`       | Focus group management for Tab navigation          |
-| `src/screen.ts`      | Screen, ScreenIO, denoTerminalIO(), TestScreenIO   |
-| `src/node_io.ts`     | nodeTerminalIO() — ScreenIO for Bun/Node.js        |
-| `src/run.ts`         | run() — callback-style sugar over Screen           |
-| `src/test_driver.ts` | TestDriver — headless driver for run()-style apps  |
-| `src/terminal.ts`    | Deno terminal I/O (raw mode, size, alt screen)     |
+| Module               | Purpose                                            | Runtime  |
+| -------------------- | -------------------------------------------------- | -------- |
+| `src/ansi.ts`        | ANSI escape codes, color helpers, string utilities | Agnostic |
+| `src/canvas.ts`      | Double-buffered rendering surface with clip stack  | Agnostic |
+| `src/components.ts`  | UI components (Text, Box, List, Table, etc.)       | Agnostic |
+| `src/layout.ts`      | Layout primitives (Row, Column, Flex, Grid, etc.)  | Agnostic |
+| `src/input.ts`       | Key parsing, keyEventsFrom(read), ReadFn           | Agnostic |
+| `src/focus.ts`       | Focus group management for Tab navigation          | Agnostic |
+| `src/screen.ts`      | Screen, ScreenIO, TerminalSize, TestScreenIO       | Agnostic |
+| `src/run.ts`         | run(), renderOnce(), AppConfig, RunConfig          | Agnostic |
+| `src/test_driver.ts` | TestDriver — headless driver for run()-style apps  | Agnostic |
+| `src/deno_io.ts`     | denoTerminalIO(), Deno terminal helpers            | Deno     |
+| `src/node_io.ts`     | nodeTerminalIO() via node:process                  | Bun/Node |
 
 ## Verification
 

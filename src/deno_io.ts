@@ -1,12 +1,9 @@
-/** Terminal interaction utilities — low-level wrappers around Deno terminal APIs. */
+/** Deno-specific terminal I/O — wrappers around Deno terminal APIs. */
 
 import { clear, cursor, osc, screen } from "./ansi.ts";
-
-/** Terminal dimensions in characters. */
-export interface TerminalSize {
-  columns: number;
-  rows: number;
-}
+import type { Canvas } from "./canvas.ts";
+import { keyEvents } from "./input.ts";
+import type { ScreenEvent, ScreenIO, TerminalSize } from "./screen.ts";
 
 /** Get current terminal dimensions. Returns 80x24 if not a TTY. */
 export function getSize(): TerminalSize {
@@ -135,4 +132,84 @@ export function prefersReducedMotion(): boolean {
   } catch {
     return false;
   }
+}
+
+/** ScreenIO implementation for Deno's terminal APIs. */
+export function denoTerminalIO(): ScreenIO {
+  return {
+    size: getSize,
+
+    setup(altScreen: boolean, cursorHidden: boolean): void {
+      if (altScreen) enterAltScreen();
+      if (cursorHidden) hideCursor();
+      setRawMode(true);
+      clearScreen();
+    },
+
+    teardown(altScreen: boolean, cursorHidden: boolean): void {
+      setRawMode(false);
+      if (cursorHidden) showCursor();
+      if (altScreen) exitAltScreen();
+    },
+
+    flush(canvas: Canvas): void {
+      const output = canvas.render();
+      if (output) write(output);
+    },
+
+    async *events(): AsyncGenerator<ScreenEvent> {
+      const queue: ScreenEvent[] = [];
+      let wakeup: (() => void) | null = null;
+
+      const notify = () => {
+        wakeup?.();
+      };
+
+      const removeResize = onResize((size) => {
+        queue.push({
+          type: "resize",
+          columns: size.columns,
+          rows: size.rows,
+        });
+        notify();
+      });
+
+      let keyReaderDone = false;
+      const keyReaderPromise = (async () => {
+        for await (const event of keyEvents()) {
+          queue.push({ ...event, type: "key" as const });
+          notify();
+        }
+        keyReaderDone = true;
+        notify();
+      })();
+
+      try {
+        while (!keyReaderDone) {
+          while (queue.length > 0) {
+            yield queue.shift()!;
+          }
+          if (keyReaderDone) break;
+          await new Promise<void>((resolve) => {
+            wakeup = resolve;
+          });
+          wakeup = null;
+        }
+        while (queue.length > 0) {
+          yield queue.shift()!;
+        }
+      } finally {
+        removeResize();
+        await keyReaderPromise.catch(() => {});
+      }
+    },
+
+    close(): void {
+      try {
+        Deno.stdin.close();
+      } catch {
+        // Ignore if already closed
+      }
+    },
+  };
 }

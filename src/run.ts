@@ -6,8 +6,12 @@
 import { Canvas } from "./canvas.ts";
 import type { Component } from "./components.ts";
 import type { KeyEvent } from "./input.ts";
-import { type RenderContext, Screen, type ScreenIO } from "./screen.ts";
-import type { TerminalSize } from "./terminal.ts";
+import {
+  type RenderContext,
+  Screen,
+  type ScreenIO,
+  type TerminalSize,
+} from "./screen.ts";
 
 /** App logic configuration — render, key handling, tick, resize. Runtime-agnostic. */
 export interface AppConfig {

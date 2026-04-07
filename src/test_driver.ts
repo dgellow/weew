@@ -3,9 +3,8 @@
 import { Canvas } from "./canvas.ts";
 import type { Component, Rect } from "./components.ts";
 import type { AppConfig, RunControl } from "./run.ts";
-import type { RenderContext } from "./screen.ts";
+import type { RenderContext, TerminalSize } from "./screen.ts";
 import type { KeyEvent } from "./input.ts";
-import type { TerminalSize } from "./terminal.ts";
 
 /**
  * Headless driver for testing weew apps without a real terminal.

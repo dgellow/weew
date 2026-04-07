@@ -1,5 +1,5 @@
 /**
- * weew — A lightweight terminal UI library for Deno.
+ * weew — A lightweight, runtime-agnostic terminal UI library.
  * No dependencies, no React, no JSX — just simple, functional components.
  * @module
  */
@@ -29,11 +29,12 @@ export type {
   StyleCommands,
 } from "./src/ansi.ts";
 
-// Terminal utilities
+// Deno terminal utilities
 export {
   bell,
   clearLine,
   clearScreen,
+  denoTerminalIO,
   enterAltScreen,
   exitAltScreen,
   getSize,
@@ -48,8 +49,7 @@ export {
   showCursor,
   write,
   writeLine,
-} from "./src/terminal.ts";
-export type { TerminalSize } from "./src/terminal.ts";
+} from "./src/deno_io.ts";
 
 // Canvas/rendering
 export { Canvas } from "./src/canvas.ts";
@@ -174,13 +174,14 @@ export {
 export type { KeyEvent, ReadFn } from "./src/input.ts";
 
 // Screen — low-level terminal session
-export { denoTerminalIO, Screen, TestScreenIO } from "./src/screen.ts";
+export { Screen, TestScreenIO } from "./src/screen.ts";
 export { nodeTerminalIO } from "./src/node_io.ts";
 export type {
   RenderContext,
   ScreenConfig,
   ScreenEvent,
   ScreenIO,
+  TerminalSize,
 } from "./src/screen.ts";
 
 // run() — convenience wrapper over Screen

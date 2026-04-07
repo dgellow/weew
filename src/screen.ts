@@ -1,31 +1,23 @@
 /**
  * Screen — low-level terminal session primitive.
- * Manages terminal lifecycle (alt screen, raw mode, cursor),
- * provides a draw() method for rendering, and an events() async
- * generator for unified key + resize events.
- *
- * Accepts an injectable ScreenIO for testability. Defaults to real terminal.
+ * Runtime-agnostic: requires a ScreenIO implementation for terminal I/O.
  */
 
 import { Canvas } from "./canvas.ts";
 import type { Component, Rect } from "./components.ts";
-import { type KeyEvent, keyEvents } from "./input.ts";
+import type { KeyEvent } from "./input.ts";
+
+/** Terminal dimensions in characters. */
+export interface TerminalSize {
+  columns: number;
+  rows: number;
+}
+
 /** Context passed to the render function with current terminal dimensions. */
 export interface RenderContext {
   width: number;
   height: number;
 }
-import {
-  clearScreen,
-  enterAltScreen,
-  exitAltScreen,
-  getSize,
-  hideCursor as termHideCursor,
-  onResize,
-  setRawMode,
-  showCursor as termShowCursor,
-  write,
-} from "./terminal.ts";
 
 /** Configuration for creating a Screen. */
 export interface ScreenConfig {
@@ -68,86 +60,6 @@ export interface ResizeScreenEvent {
 
 /** Events yielded by Screen.events(). */
 export type ScreenEvent = KeyScreenEvent | ResizeScreenEvent;
-
-/** ScreenIO implementation for Deno's terminal APIs. */
-export function denoTerminalIO(): ScreenIO {
-  return {
-    size: getSize,
-
-    setup(altScreen: boolean, hideCursor: boolean): void {
-      if (altScreen) enterAltScreen();
-      if (hideCursor) termHideCursor();
-      setRawMode(true);
-      clearScreen();
-    },
-
-    teardown(altScreen: boolean, hideCursor: boolean): void {
-      setRawMode(false);
-      if (hideCursor) termShowCursor();
-      if (altScreen) exitAltScreen();
-    },
-
-    flush(canvas: Canvas): void {
-      const output = canvas.render();
-      if (output) write(output);
-    },
-
-    async *events(): AsyncGenerator<ScreenEvent> {
-      const queue: ScreenEvent[] = [];
-      let wakeup: (() => void) | null = null;
-
-      const notify = () => {
-        wakeup?.();
-      };
-
-      const removeResize = onResize((size) => {
-        queue.push({
-          type: "resize",
-          columns: size.columns,
-          rows: size.rows,
-        });
-        notify();
-      });
-
-      let keyReaderDone = false;
-      const keyReaderPromise = (async () => {
-        for await (const event of keyEvents()) {
-          queue.push({ ...event, type: "key" as const });
-          notify();
-        }
-        keyReaderDone = true;
-        notify();
-      })();
-
-      try {
-        while (!keyReaderDone) {
-          while (queue.length > 0) {
-            yield queue.shift()!;
-          }
-          if (keyReaderDone) break;
-          await new Promise<void>((resolve) => {
-            wakeup = resolve;
-          });
-          wakeup = null;
-        }
-        while (queue.length > 0) {
-          yield queue.shift()!;
-        }
-      } finally {
-        removeResize();
-        await keyReaderPromise.catch(() => {});
-      }
-    },
-
-    close(): void {
-      try {
-        Deno.stdin.close();
-      } catch {
-        // Ignore if already closed
-      }
-    },
-  };
-}
 
 /**
  * Low-level terminal session. Manages terminal setup/teardown,
