@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run -A
 // Interactive form demo with TextInput, focus, and scroll
 import {
   Box,

@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run -A
 // Quick emoji and animation test
 import { Box, colors, Column, denoTerminalIO, run, Text } from "../mod.ts";
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run -A
 // Collapsible sections demo — accordion-style foldable panels
 
 import {

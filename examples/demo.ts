@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run -A
 // Demo app showcasing weew features
 
 import {

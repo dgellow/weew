@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run -A
 // Screen API demo — user owns the event loop
 import { Box, colors, denoTerminalIO, isKey, Screen, Text } from "../mod.ts";
 

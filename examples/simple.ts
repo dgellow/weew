@@ -1,3 +1,4 @@
+#!/usr/bin/env -S deno run -A
 // Simple counter example
 
 import { Box, colors, denoTerminalIO, isKey, run, Text } from "../mod.ts";
