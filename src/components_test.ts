@@ -4,6 +4,7 @@ import {
   Box,
   buildStyle,
   Checkbox,
+  Collapsible,
   colors,
   Dialog,
   Divider,
@@ -1893,4 +1894,120 @@ Deno.test("Table without headers renders rows directly", () => {
   // First row starts at y=0 (no headers)
   assertEquals(canvas.get(0, 0)?.char, "A");
   assertEquals(canvas.get(0, 1)?.char, "B");
+});
+
+// -- Collapsible --
+
+Deno.test("Collapsible renders header with expanded icon", () => {
+  const canvas = new Canvas(30, 5);
+  Collapsible({
+    header: "Settings",
+    expanded: true,
+    child: Text("Content here"),
+  }).render(canvas, { x: 0, y: 0, width: 30, height: 5 });
+
+  assertEquals(canvas.get(0, 0)?.char, "▾");
+  assertEquals(canvas.get(2, 0)?.char, "S");
+});
+
+Deno.test("Collapsible renders header with collapsed icon", () => {
+  const canvas = new Canvas(30, 5);
+  Collapsible({
+    header: "Settings",
+    expanded: false,
+    child: Text("Content here"),
+  }).render(canvas, { x: 0, y: 0, width: 30, height: 5 });
+
+  assertEquals(canvas.get(0, 0)?.char, "▸");
+  assertEquals(canvas.get(2, 0)?.char, "S");
+});
+
+Deno.test("Collapsible shows child when expanded", () => {
+  const canvas = new Canvas(30, 5);
+  Collapsible({
+    header: "Details",
+    expanded: true,
+    child: Text("Visible"),
+  }).render(canvas, { x: 0, y: 0, width: 30, height: 5 });
+
+  // Child renders at y=1
+  assertEquals(canvas.get(0, 1)?.char, "V");
+});
+
+Deno.test("Collapsible hides child when collapsed", () => {
+  const canvas = new Canvas(30, 5);
+  Collapsible({
+    header: "Details",
+    expanded: false,
+    child: Text("Hidden"),
+  }).render(canvas, { x: 0, y: 0, width: 30, height: 5 });
+
+  // y=1 should be blank
+  assertEquals(canvas.get(0, 1)?.char, " ");
+});
+
+Deno.test("Collapsible.handleKey toggles on Space", () => {
+  const c = Collapsible({
+    header: "Test",
+    expanded: false,
+    child: Text(""),
+  });
+  const result = c.handleKey(key(" "));
+  assertEquals(result?.expanded, true);
+});
+
+Deno.test("Collapsible.handleKey toggles on Enter", () => {
+  const c = Collapsible({
+    header: "Test",
+    expanded: true,
+    child: Text(""),
+  });
+  const result = c.handleKey(key("Enter"));
+  assertEquals(result?.expanded, false);
+});
+
+Deno.test("Collapsible.handleKey ignores other keys", () => {
+  const c = Collapsible({
+    header: "Test",
+    expanded: true,
+    child: Text(""),
+  });
+  assertEquals(c.handleKey(key("a")), undefined);
+  assertEquals(c.handleKey(key("Up")), undefined);
+});
+
+Deno.test("Collapsible with Component header", () => {
+  const canvas = new Canvas(30, 5);
+  Collapsible({
+    header: Text({ content: "Custom", style: { bold: true } }),
+    expanded: true,
+    child: Text("Body"),
+  }).render(canvas, { x: 0, y: 0, width: 30, height: 5 });
+
+  // Icon at x=0, header component starts at x=2
+  assertEquals(canvas.get(0, 0)?.char, "▾");
+  assertEquals(canvas.get(2, 0)?.char, "C");
+  assertEquals(canvas.get(0, 1)?.char, "B");
+});
+
+Deno.test("Collapsible with custom icons", () => {
+  const canvas = new Canvas(30, 5);
+  Collapsible({
+    header: "Open",
+    expanded: true,
+    expandedIcon: "−",
+    collapsedIcon: "+",
+    child: Text(""),
+  }).render(canvas, { x: 0, y: 0, width: 30, height: 5 });
+  assertEquals(canvas.get(0, 0)?.char, "−");
+
+  const canvas2 = new Canvas(30, 5);
+  Collapsible({
+    header: "Closed",
+    expanded: false,
+    expandedIcon: "−",
+    collapsedIcon: "+",
+    child: Text(""),
+  }).render(canvas2, { x: 0, y: 0, width: 30, height: 5 });
+  assertEquals(canvas2.get(0, 0)?.char, "+");
 });

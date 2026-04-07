@@ -221,6 +221,23 @@ FocusContainer({
 });
 ```
 
+### Collapsible
+
+```typescript
+Collapsible({
+  header: "Settings",
+  expanded: state.settingsOpen,
+  child: Column([
+    { component: Text("Theme: Dark"), height: 1 },
+    { component: Text("Language: English"), height: 1 },
+  ]),
+});
+
+// Toggle via handleKey
+const update = collapsible.handleKey(event); // Space/Enter toggles
+if (update) state.settingsOpen = update.expanded;
+```
+
 ## Layout
 
 ### Row / Column

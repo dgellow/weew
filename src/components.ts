@@ -78,6 +78,11 @@ export interface TreeUpdate {
   toggled?: string;
 }
 
+/** State update returned by Collapsible.handleKey. */
+export interface CollapsibleUpdate {
+  expanded: boolean;
+}
+
 /**
  * Custom key bindings for list navigation. Each action maps to an array of key specs.
  * Key specs can include modifiers: `"Ctrl+d"`, `"Shift+Home"`, or plain keys: `"j"`, `"Up"`.
@@ -1765,6 +1770,77 @@ export interface ToastProps {
   style?: Style;
   position?: "top" | "bottom";
   width?: number;
+}
+
+/** Props for the Collapsible component. */
+export interface CollapsibleProps {
+  /** Header text or component, always visible. */
+  header: string | Component;
+  /** Whether the child content is visible. */
+  expanded: boolean;
+  /** Content shown when expanded. */
+  child: Component;
+  /** Style for the header text (when header is a string). */
+  headerStyle?: Style;
+  /** Icon when expanded (default "▾"). */
+  expandedIcon?: string;
+  /** Icon when collapsed (default "▸"). */
+  collapsedIcon?: string;
+}
+
+/** A foldable container with a toggleable header. Space/Enter toggles expanded state. */
+export function Collapsible(
+  props: CollapsibleProps,
+): InputComponent<CollapsibleUpdate> {
+  const expandedIcon = props.expandedIcon ?? "▾";
+  const collapsedIcon = props.collapsedIcon ?? "▸";
+
+  return {
+    render(canvas: Canvas, rect: Rect) {
+      if (rect.height < 1) return;
+
+      const icon = props.expanded ? expandedIcon : collapsedIcon;
+
+      // Render header
+      if (typeof props.header === "string") {
+        const styleStr = props.headerStyle
+          ? buildStyle(props.headerStyle)
+          : undefined;
+        canvas.text(rect.x, rect.y, `${icon} ${props.header}`, {
+          fg: props.headerStyle?.fg,
+          bg: props.headerStyle?.bg,
+          style: styleStr,
+        });
+      } else {
+        canvas.text(rect.x, rect.y, `${icon} `, {
+          fg: props.headerStyle?.fg,
+        });
+        props.header.render(canvas, {
+          x: rect.x + 2,
+          y: rect.y,
+          width: rect.width - 2,
+          height: 1,
+        });
+      }
+
+      // Render child when expanded
+      if (props.expanded && rect.height > 1) {
+        props.child.render(canvas, {
+          x: rect.x,
+          y: rect.y + 1,
+          width: rect.width,
+          height: rect.height - 1,
+        });
+      }
+    },
+
+    handleKey(event: KeyEvent): CollapsibleUpdate | undefined {
+      if (event.key === " " || event.key === "Enter") {
+        return { expanded: !props.expanded };
+      }
+      return undefined;
+    },
+  };
 }
 
 /** A centered notification bar at the top or bottom of the screen. */
