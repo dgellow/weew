@@ -1,14 +1,35 @@
 # Changelog
 
+## 0.6.0
+
+### Features
+
+- add Collapsible component
+
+### Bug Fixes
+
+- use keyEventsFrom in nodeTerminalIO, fix close() hang on blocked stdin read
+
+### Code Refactoring
+
+- rename terminal.ts to deno_io.ts, move denoTerminalIO and TerminalSize to proper homes
+- deduplicate music example into music-app/ with shared app logic
+- extract keyEventsFrom for shared ESC disambiguation, fix double-ESC bug
+
+### Chores
+
+- add shebangs to all example entrypoints
+- scripts delegate to deno tasks, remove hardcoded file globs
+
 ## 0.5.0
 
-### ⚠️ Breaking Changes
+### â ï¸ Breaking Changes
 
 - runtime-agnostic core, Bun support via nodeTerminalIO
 
 ## 0.4.0
 
-### â ï¸ Breaking Changes
+### Ã¢ÂÂ Ã¯Â¸Â Breaking Changes
 
 - add Screen primitive, rename App types to Run
 
@@ -18,7 +39,7 @@
 
 ## 0.3.0
 
-### Ã¢ÂÂ Ã¯Â¸Â Breaking Changes
+### ÃÂ¢ÃÂÃÂ ÃÂ¯ÃÂ¸ÃÂ Breaking Changes
 
 - remove state from App, fix Shift+Tab, case-sensitive isKey
 
